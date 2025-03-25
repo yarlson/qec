@@ -53,8 +53,8 @@ func (e *Executor) writeConfig() (string, error) {
 	return configFile, nil
 }
 
-// Up starts the services defined in the configuration
-func (e *Executor) Up(detach bool) error {
+// ExecuteCommand executes a Docker Compose command with the merged configuration
+func (e *Executor) ExecuteCommand(cmdName string, args ...string) error {
 	// First check if Docker Compose is available
 	if err := CheckDockerCompose(e.logger); err != nil {
 		return fmt.Errorf("docker compose check failed: %w", err)
@@ -73,17 +73,15 @@ func (e *Executor) Up(detach bool) error {
 	}
 
 	// Build the command arguments
-	args := []string{"-f", configFile, "up", "--remove-orphans"}
-	if detach {
-		args = append(args, "-d")
-	}
+	cmdArgs := []string{"-f", configFile, cmdName}
+	cmdArgs = append(cmdArgs, args...)
 
 	// Configure the command
-	cmd.WithArgs(args...).WithWorkingDir(e.workingDir)
+	cmd.WithArgs(cmdArgs...).WithWorkingDir(e.workingDir)
 
 	// If this is a dry run, just log what would be done
 	if e.dryRun {
-		e.logger.Info("Dry run: would execute docker compose up")
+		e.logger.Info("Dry run: would execute docker compose " + cmdName)
 		e.logger.Debugf("Command: %s %v", cmd.Executable, cmd.Args)
 		return nil
 	}
@@ -91,86 +89,14 @@ func (e *Executor) Up(detach bool) error {
 	// Run the command
 	output, err := cmd.Run(e.logger)
 	if err != nil {
-		return fmt.Errorf("docker compose up failed: %w\nOutput: %s", err, output.Output)
+		return fmt.Errorf("docker compose %s failed: %w\nOutput: %s", cmdName, err, output.Output)
 	}
 
-	return nil
-}
-
-// Down stops and removes the services defined in the configuration
-func (e *Executor) Down() error {
-	// First check if Docker Compose is available
-	if err := CheckDockerCompose(e.logger); err != nil {
-		return fmt.Errorf("docker compose check failed: %w", err)
+	// For certain commands, we want to print the output
+	switch cmdName {
+	case "ps", "logs", "config":
+		fmt.Print(output.Output)
 	}
 
-	// Write the merged configuration to a file
-	configFile, err := e.writeConfig()
-	if err != nil {
-		return err
-	}
-
-	// Create the Docker Compose command
-	cmd, err := NewDockerComposeCmd(e.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create docker compose command: %w", err)
-	}
-
-	// Configure the command
-	cmd.WithArgs("-f", configFile, "down", "--remove-orphans").WithWorkingDir(e.workingDir)
-
-	// If this is a dry run, just log what would be done
-	if e.dryRun {
-		e.logger.Info("Dry run: would execute docker compose down")
-		e.logger.Debugf("Command: %s %v", cmd.Executable, cmd.Args)
-		return nil
-	}
-
-	// Run the command
-	output, err := cmd.Run(e.logger)
-	if err != nil {
-		return fmt.Errorf("docker compose down failed: %w\nOutput: %s", err, output.Output)
-	}
-
-	return nil
-}
-
-// Config validates and shows the merged configuration
-func (e *Executor) Config() error {
-	// First check if Docker Compose is available
-	if err := CheckDockerCompose(e.logger); err != nil {
-		return fmt.Errorf("docker compose check failed: %w", err)
-	}
-
-	// Write the merged configuration to a file
-	configFile, err := e.writeConfig()
-	if err != nil {
-		return err
-	}
-
-	// Create the Docker Compose command
-	cmd, err := NewDockerComposeCmd(e.logger)
-	if err != nil {
-		return fmt.Errorf("failed to create docker compose command: %w", err)
-	}
-
-	// Configure the command
-	cmd.WithArgs("-f", configFile, "config").WithWorkingDir(e.workingDir)
-
-	// If this is a dry run, just log what would be done
-	if e.dryRun {
-		e.logger.Info("Dry run: would execute docker compose config")
-		e.logger.Debugf("Command: %s %v", cmd.Executable, cmd.Args)
-		return nil
-	}
-
-	// Run the command
-	output, err := cmd.Run(e.logger)
-	if err != nil {
-		return fmt.Errorf("docker compose config failed: %w\nOutput: %s", err, output.Output)
-	}
-
-	// Print the configuration
-	fmt.Println(output.Output)
 	return nil
 }

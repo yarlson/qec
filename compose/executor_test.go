@@ -66,60 +66,51 @@ func (suite *ExecutorTestSuite) TestWriteConfig() {
 	assert.Contains(suite.T(), string(content), "hello-world")
 }
 
-// TestUpDryRun tests the up command in dry-run mode
-func (suite *ExecutorTestSuite) TestUpDryRun() {
-	executor := NewExecutor(suite.project, suite.tmpDir, true, suite.logger)
-
-	// Test up command
-	err := executor.Up(true)
-	assert.NoError(suite.T(), err)
-
-	// Verify the merged config file was not created
-	_, err = os.Stat(filepath.Join(suite.tmpDir, "docker-compose.merged.yml"))
-	assert.True(suite.T(), os.IsNotExist(err))
-}
-
-// TestDownDryRun tests the down command in dry-run mode
-func (suite *ExecutorTestSuite) TestDownDryRun() {
-	executor := NewExecutor(suite.project, suite.tmpDir, true, suite.logger)
-
-	// Test down command
-	err := executor.Down()
-	assert.NoError(suite.T(), err)
-
-	// Verify the merged config file was not created
-	_, err = os.Stat(filepath.Join(suite.tmpDir, "docker-compose.merged.yml"))
-	assert.True(suite.T(), os.IsNotExist(err))
-}
-
-// TestConfigDryRun tests the config command in dry-run mode
-func (suite *ExecutorTestSuite) TestConfigDryRun() {
-	executor := NewExecutor(suite.project, suite.tmpDir, true, suite.logger)
-
-	// Test config command
-	err := executor.Config()
-	assert.NoError(suite.T(), err)
-
-	// Verify the merged config file was not created
-	_, err = os.Stat(filepath.Join(suite.tmpDir, "docker-compose.merged.yml"))
-	assert.True(suite.T(), os.IsNotExist(err))
-}
-
-// TestUpLive tests the up command with actual execution
-func (suite *ExecutorTestSuite) TestUpLive() {
+// TestExecuteCommand tests the generic command execution
+func (suite *ExecutorTestSuite) TestExecuteCommand() {
 	executor := NewExecutor(suite.project, suite.tmpDir, false, suite.logger)
 
-	// Test up command
-	err := executor.Up(true)
+	// Test ps command
+	err := executor.ExecuteCommand("ps")
 	assert.NoError(suite.T(), err)
 
-	// Verify the merged config file was created
-	configFile := filepath.Join(suite.tmpDir, "docker-compose.merged.yml")
-	_, err = os.Stat(configFile)
+	// Test logs command
+	err = executor.ExecuteCommand("logs")
 	assert.NoError(suite.T(), err)
 
-	// Clean up
-	_ = executor.Down()
+	// Test build command
+	err = executor.ExecuteCommand("build")
+	assert.NoError(suite.T(), err)
+
+	// Test pull command
+	err = executor.ExecuteCommand("pull")
+	assert.NoError(suite.T(), err)
+
+	// Test push command
+	err = executor.ExecuteCommand("push")
+	assert.NoError(suite.T(), err)
+
+	// Test with additional arguments
+	err = executor.ExecuteCommand("logs", "--tail=100", "--follow")
+	assert.NoError(suite.T(), err)
+
+	// Test with invalid command
+	err = executor.ExecuteCommand("invalid-command")
+	assert.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "docker compose invalid-command failed")
+}
+
+// TestExecuteCommandDryRun tests command execution in dry-run mode
+func (suite *ExecutorTestSuite) TestExecuteCommandDryRun() {
+	executor := NewExecutor(suite.project, suite.tmpDir, true, suite.logger)
+
+	// Test ps command in dry-run mode
+	err := executor.ExecuteCommand("ps")
+	assert.NoError(suite.T(), err)
+
+	// Verify the merged config file was not created
+	_, err = os.Stat(filepath.Join(suite.tmpDir, "docker-compose.merged.yml"))
+	assert.True(suite.T(), os.IsNotExist(err))
 }
 
 // Run the test suite

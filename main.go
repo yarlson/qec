@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gihub.com/yarlson/qec/compose"
 	"github.com/sirupsen/logrus"
+
+	"gihub.com/yarlson/qec/compose"
 )
 
 var (
@@ -16,6 +17,7 @@ var (
 	dryRun       bool
 	detach       bool
 	command      string
+	args         []string
 )
 
 // multiFlag is a custom flag type to handle multiple -f options
@@ -67,22 +69,19 @@ func run() error {
 	workingDir := filepath.Dir(composeFiles[0])
 	executor := compose.NewExecutor(merged, workingDir, dryRun, logger.WithField("component", "executor"))
 
-	// Execute the requested command
-	switch command {
-	case "up":
-		if err := executor.Up(detach); err != nil {
-			return fmt.Errorf("error executing up command: %v", err)
+	// Add command-specific arguments
+	if command == "up" {
+		args = append([]string{"--remove-orphans"}, args...)
+		if detach {
+			args = append(args, "-d")
 		}
-	case "down":
-		if err := executor.Down(); err != nil {
-			return fmt.Errorf("error executing down command: %v", err)
-		}
-	case "config":
-		if err := executor.Config(); err != nil {
-			return fmt.Errorf("error executing config command: %v", err)
-		}
-	default:
-		return fmt.Errorf("unknown command: %s", command)
+	} else if command == "down" {
+		args = append([]string{"--remove-orphans"}, args...)
+	}
+
+	// Execute the command
+	if err := executor.ExecuteCommand(command, args...); err != nil {
+		return fmt.Errorf("error executing %s command: %v", command, err)
 	}
 
 	logger.Info("Command executed successfully")
@@ -95,11 +94,14 @@ func main() {
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 	flag.BoolVar(&dryRun, "dry-run", false, "Simulate configuration without making runtime changes")
 	flag.BoolVar(&detach, "d", false, "Run containers in the background")
-	flag.StringVar(&command, "command", "up", "Command to execute (up, down, or config)")
+	flag.StringVar(&command, "command", "up", "Command to execute (up, down, config, ps, logs, build, pull, push)")
 	flag.Parse()
 
+	// Get any additional arguments after the flags
+	args = flag.Args()
+
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

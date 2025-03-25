@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -39,7 +40,7 @@ func NewComposeFile(path string, logger *logrus.Entry) (*ComposeFile, error) {
 	}
 
 	// Load the project
-	project, err := cli.ProjectFromOptions(options)
+	project, err := options.LoadProject(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project from %s: %w", path, err)
 	}
