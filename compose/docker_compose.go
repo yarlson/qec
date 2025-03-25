@@ -1,12 +1,20 @@
 package compose
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 )
+
+// CommandOutput represents the output from a Docker Compose command
+type CommandOutput struct {
+	ExitCode int    // Exit code from the command
+	Output   string // Combined stdout and stderr output
+}
 
 // DockerComposeCmd represents a Docker Compose command configuration
 type DockerComposeCmd struct {
@@ -78,6 +86,63 @@ func (cmd *DockerComposeCmd) Build(logger *logrus.Entry) *exec.Cmd {
 	logger.Debugf("Executing command: %s %s", cmd.Executable, strings.Join(finalArgs, " "))
 
 	return command
+}
+
+// Run executes the Docker Compose command and returns its output
+func (cmd *DockerComposeCmd) Run(logger *logrus.Entry) (*CommandOutput, error) {
+	// Build the command
+	execCmd := cmd.Build(logger)
+
+	// Create buffers for stdout and stderr
+	var stdout, stderr bytes.Buffer
+	execCmd.Stdout = &stdout
+	execCmd.Stderr = &stderr
+
+	// Run the command
+	err := execCmd.Run()
+
+	// Combine stdout and stderr
+	var output bytes.Buffer
+	_, _ = io.Copy(&output, &stdout)
+	_, _ = io.Copy(&output, &stderr)
+
+	// Create the command output
+	cmdOutput := &CommandOutput{
+		ExitCode: 0,
+		Output:   output.String(),
+	}
+
+	// Handle error and exit code
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			cmdOutput.ExitCode = exitErr.ExitCode()
+			logger.WithFields(logrus.Fields{
+				"exit_code": cmdOutput.ExitCode,
+				"error":     err,
+			}).Debug("Command failed")
+			return cmdOutput, fmt.Errorf("command failed with exit code %d: %w", cmdOutput.ExitCode, err)
+		}
+		logger.WithError(err).Debug("Command failed to execute")
+		return cmdOutput, fmt.Errorf("failed to execute command: %w", err)
+	}
+
+	logger.WithField("output", cmdOutput.Output).Debug("Command completed successfully")
+	return cmdOutput, nil
+}
+
+// RunBackground executes the Docker Compose command in the background
+func (cmd *DockerComposeCmd) RunBackground(logger *logrus.Entry) error {
+	// Build the command
+	execCmd := cmd.Build(logger)
+
+	// Start the command without waiting for it to complete
+	if err := execCmd.Start(); err != nil {
+		logger.WithError(err).Debug("Failed to start background command")
+		return fmt.Errorf("failed to start background command: %w", err)
+	}
+
+	logger.Debug("Command started in background")
+	return nil
 }
 
 // CheckDockerCompose verifies that Docker Compose is installed and accessible

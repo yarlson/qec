@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/sirupsen/logrus"
@@ -81,6 +82,57 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdBuild() {
 	} else {
 		assert.Equal(suite.T(), []string{"up", "-d"}, execCmd.Args[1:])
 	}
+}
+
+// TestDockerComposeCmdRun tests command execution
+func (suite *DockerComposeTestSuite) TestDockerComposeCmdRun() {
+	cmd, err := NewDockerComposeCmd(suite.logger)
+	require.NoError(suite.T(), err)
+
+	// Test successful command (version)
+	cmd.Args = []string{"version"}
+	output, err := cmd.Run(suite.logger)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), 0, output.ExitCode)
+	assert.NotEmpty(suite.T(), output.Output)
+	assert.Contains(suite.T(), strings.ToLower(output.Output), "version")
+
+	// Test failed command
+	cmd.Args = []string{"non-existent-command"}
+	output, err = cmd.Run(suite.logger)
+	assert.Error(suite.T(), err)
+	assert.NotEqual(suite.T(), 0, output.ExitCode)
+	assert.NotEmpty(suite.T(), output.Output)
+}
+
+// TestDockerComposeCmdRunBackground tests background command execution
+func (suite *DockerComposeTestSuite) TestDockerComposeCmdRunBackground() {
+	// Create a test compose file
+	composeFile := filepath.Join(suite.tmpDir, "docker-compose.yml")
+	content := []byte(`
+version: '3'
+services:
+  test:
+    image: hello-world
+`)
+	err := os.WriteFile(composeFile, content, 0644)
+	require.NoError(suite.T(), err)
+
+	// Create and configure the command
+	cmd, err := NewDockerComposeCmd(suite.logger)
+	require.NoError(suite.T(), err)
+
+	cmd.WithWorkingDir(suite.tmpDir)
+	cmd.WithArgs("-f", "docker-compose.yml", "up", "-d")
+
+	// Run in background
+	err = cmd.RunBackground(suite.logger)
+	assert.NoError(suite.T(), err)
+
+	// Test with invalid working directory
+	cmd.WithWorkingDir("/nonexistent")
+	err = cmd.RunBackground(suite.logger)
+	assert.Error(suite.T(), err)
 }
 
 // TestCheckDockerCompose tests the Docker Compose detection functionality
