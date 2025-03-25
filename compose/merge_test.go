@@ -1,17 +1,16 @@
-package main
+package compose
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"gihub.com/yarlson/qec/compose"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestComposeFileHandling(t *testing.T) {
+func TestNewComposeFile(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
 
@@ -38,7 +37,7 @@ services:
 	logger := logrus.New().WithField("test", true)
 
 	// Test loading the compose file
-	cf, err := compose.NewComposeFile(testFile, logger)
+	cf, err := NewComposeFile(testFile, logger)
 	require.NoError(t, err)
 	assert.Equal(t, testFile, cf.Path)
 	assert.Equal(t, tmpDir, cf.BaseDir)
@@ -52,7 +51,7 @@ services:
 	assert.Equal(t, filepath.Join(tmpDir, "app"), service.Build.Context)
 }
 
-func TestMultipleComposeFiles(t *testing.T) {
+func TestMergeComposeFiles(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
 
@@ -103,12 +102,12 @@ services:
 	logger := logrus.New().WithField("test", true)
 
 	// Load and merge the compose files
-	cf1, err := compose.NewComposeFile(file1, logger)
+	cf1, err := NewComposeFile(file1, logger)
 	require.NoError(t, err)
-	cf2, err := compose.NewComposeFile(file2, logger)
+	cf2, err := NewComposeFile(file2, logger)
 	require.NoError(t, err)
 
-	merged, err := compose.MergeComposeFiles([]*compose.ComposeFile{cf1, cf2})
+	merged, err := MergeComposeFiles([]*ComposeFile{cf1, cf2})
 	require.NoError(t, err)
 
 	// Verify merged configuration
@@ -129,4 +128,46 @@ services:
 	app3 := merged.Services["app3"]
 	assert.Equal(t, "postgres", app3.Image)
 	assert.Equal(t, uint32(5432), app3.Ports[0].Target)
+}
+
+func TestAdjustBuildContexts(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// Create a test compose file with relative and absolute build contexts
+	testFile := filepath.Join(tmpDir, "docker-compose.yml")
+	content := []byte(`
+version: '3'
+services:
+  app1:
+    build:
+      context: ./app1
+  app2:
+    build:
+      context: /absolute/path
+`)
+	err := os.WriteFile(testFile, content, 0644)
+	require.NoError(t, err)
+
+	// Create necessary directory
+	err = os.MkdirAll(filepath.Join(tmpDir, "app1"), 0755)
+	require.NoError(t, err)
+
+	// Create a logger for testing
+	logger := logrus.New().WithField("test", true)
+
+	// Load the compose file
+	cf, err := NewComposeFile(testFile, logger)
+	require.NoError(t, err)
+
+	// Adjust build contexts
+	err = cf.adjustBuildContexts()
+	require.NoError(t, err)
+
+	// Verify the adjusted build contexts
+	app1 := cf.Project.Services["app1"]
+	assert.Equal(t, filepath.Join(tmpDir, "app1"), app1.Build.Context)
+
+	app2 := cf.Project.Services["app2"]
+	assert.Equal(t, "/absolute/path", app2.Build.Context)
 }

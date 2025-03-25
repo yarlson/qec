@@ -4,12 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"gopkg.in/yaml.v3"
+	"gihub.com/yarlson/qec/compose"
+	"github.com/sirupsen/logrus"
 )
 
 var composeFiles multiFlag
+var verbose bool
 
 // multiFlag is a custom flag type to handle multiple -f options
 type multiFlag []string
@@ -23,50 +24,10 @@ func (m *multiFlag) Set(value string) error {
 	return nil
 }
 
-// FileInfo holds information about a compose file
-type FileInfo struct {
-	AbsPath string
-	BaseDir string
-	Content map[string]interface{}
-}
-
-// validateAndResolve checks if a file exists and determines its absolute path and base directory
-func validateAndResolve(filePath string) (*FileInfo, error) {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path for %s: %v", filePath, err)
-	}
-
-	// Check if file exists
-	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("file does not exist: %s", absPath)
-	}
-
-	baseDir := filepath.Dir(absPath)
-	return &FileInfo{
-		AbsPath: absPath,
-		BaseDir: baseDir,
-	}, nil
-}
-
-// loadYAML loads and parses a YAML file into a generic map structure
-func loadYAML(filePath string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read YAML file %s: %v", filePath, err)
-	}
-
-	var content map[string]interface{}
-	if err := yaml.Unmarshal(data, &content); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML content from %s: %v", filePath, err)
-	}
-
-	return content, nil
-}
-
 func main() {
 	// Register the -f flag to accept multiple entries
 	flag.Var(&composeFiles, "f", "Path to a docker-compose YAML file (can be specified multiple times)")
+	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 	flag.Parse()
 
 	if len(composeFiles) == 0 {
@@ -74,22 +35,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Process each file: validate, get base dir, and load YAML
-	for _, file := range composeFiles {
-		info, err := validateAndResolve(file)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		content, err := loadYAML(info.AbsPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading YAML: %v\n", err)
-			os.Exit(1)
-		}
-
-		info.Content = content
-		fmt.Printf("Processing File: %s\nBase Directory: %s\nYAML Content: %+v\n\n",
-			info.AbsPath, info.BaseDir, info.Content)
+	// Configure logging
+	logger := logrus.New()
+	if verbose {
+		logger.SetLevel(logrus.DebugLevel)
 	}
+
+	// Load and process each compose file
+	var files []*compose.ComposeFile
+	for _, file := range composeFiles {
+		cf, err := compose.NewComposeFile(file, logger.WithField("component", "loader"))
+		if err != nil {
+			logger.Fatalf("Error loading compose file %s: %v", file, err)
+		}
+		files = append(files, cf)
+	}
+
+	// Merge the compose files
+	merged, err := compose.MergeComposeFiles(files)
+	if err != nil {
+		logger.Fatalf("Error merging compose files: %v", err)
+	}
+
+	// Output the merged configuration
+	yaml, err := merged.MarshalYAML()
+	if err != nil {
+		logger.Fatalf("Error marshaling merged configuration: %v", err)
+	}
+
+	fmt.Println(string(yaml))
 }
