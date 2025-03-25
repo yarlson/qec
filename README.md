@@ -1,31 +1,29 @@
 # qec - Quantum Entanglement Communicator for Docker Compose
 
-`qec` solves common Docker Compose pain points when working with microservices spread across multiple directories. It eliminates manual path adjustments, naming conflicts, and port collision headaches that developers face when combining multiple compose files.
+`qec` makes working with multiple Docker Compose files simple and predictable. It automatically handles path adjustments, naming conflicts, and port collisions when combining microservices from different directories.
 
-## Developer Experience Problems Solved
+## Common Problems Solved
 
-### 1. No More Path Juggling
-**Problem**: When combining compose files from different directories, Docker Compose uses the first file's directory as the base for all build contexts, breaking builds in other directories.
+### 1. Build Context Resolution
+When combining compose files from different directories, Docker Compose defaults to using the first file's directory as the base path. This breaks builds in other directories. `qec` fixes this automatically:
 
-**Solution**: `qec` automatically handles build contexts:
 ```yaml
 # web/docker-compose.yml
 services:
   api:
-    build: ./api  # Works! Uses web/api
+    build: ./api  # Uses web/api as expected
 
 # db/docker-compose.yml
 services:
   worker:
-    build: ./worker  # Also works! Uses db/worker
+    build: ./worker  # Uses db/worker as expected
 ```
 
-### 2. Automatic Conflict Resolution
-**Problem**: Services from different compose files often have the same names and port mappings, requiring manual renaming and port adjustments.
+### 2. Service Name and Port Conflicts
+Multiple services often share the same names or want the same ports. `qec` handles this automatically:
 
-**Solution**: `qec` automatically prefixes resources and adjusts ports:
 ```yaml
-# Before (conflicting names and ports)
+# Before
 # web/docker-compose.yml
 services:
   api:
@@ -35,7 +33,7 @@ services:
   api:
     ports: ["3000:3000"]
 
-# After (automatically resolved)
+# After (automatically handled)
 services:
   web_api:
     ports: ["3000:3000"]
@@ -43,12 +41,11 @@ services:
     ports: ["3100:3000"]
 ```
 
-### 3. Consistent Volume Management
-**Problem**: Volume names clash between different compose files, leading to data mixing or manual prefixing.
+### 3. Volume Name Conflicts
+Shared volume names between different compose files can lead to data mixing. `qec` keeps data isolated:
 
-**Solution**: `qec` handles volume prefixing and reference updates:
 ```yaml
-# Before (volumes would conflict)
+# Before
 # web/docker-compose.yml
 services:
   api:
@@ -63,7 +60,7 @@ services:
 volumes:
   data:
 
-# After (automatically namespaced)
+# After (automatically isolated)
 services:
   web_api:
     volumes: ["web_data:/app/data"]
@@ -74,10 +71,9 @@ volumes:
   db_data:
 ```
 
-### 4. Dependency Management Made Easy
-**Problem**: Service dependencies break when combining files due to name conflicts and manual prefixing.
+### 4. Service Dependencies
+References between services break when combining files. `qec` maintains all connections:
 
-**Solution**: `qec` automatically updates all references:
 ```yaml
 # Before
 services:
@@ -88,7 +84,7 @@ services:
   postgres:
     image: postgres
 
-# After
+# After (all references updated)
 services:
   cache_api:
     depends_on: ["cache_redis", "db_postgres"]
@@ -98,9 +94,9 @@ services:
     image: postgres
 ```
 
-## Usage
+## Quick Start
 
-Simple drop-in replacement for docker-compose:
+Replace `docker-compose` with `qec`:
 
 ```bash
 # Instead of:
@@ -110,17 +106,17 @@ docker-compose -f web/docker-compose.yml -f db/docker-compose.yml up
 qec -f web/docker-compose.yml -f db/docker-compose.yml up
 ```
 
-### Preview Changes
+### Preview Mode
 
-See exactly what `qec` will do before running:
+See what changes will be made before applying them:
 
 ```bash
 qec -f web/docker-compose.yml -f db/docker-compose.yml --dry-run --verbose up
 ```
 
-### Options
+### Available Options
 
-- `-f, --file FILE`: Multiple compose files (maintains Docker Compose compatibility)
+- `-f, --file FILE`: Specify compose files (same as docker-compose)
 - `-d, --detach`: Run in background
 - `--dry-run`: Preview changes
 - `--verbose`: Show detailed adjustments
@@ -133,26 +129,24 @@ qec -f web/docker-compose.yml -f db/docker-compose.yml --dry-run --verbose up
 go install github.com/yarlson/qec@latest
 ```
 
-## Technical Details
+## How It Works
 
 ### Automatic Adjustments
-
-- **Build Contexts**: Converts relative paths to absolute based on each file's location
-- **Resource Names**: Prefixes with directory name (e.g., `web_`, `db_`)
-- **Port Conflicts**: Resolves by adding offset to later services
-- **Volume References**: Updates all volume mounts to match prefixed names
-- **Dependencies**: Updates `depends_on` and `links` to use prefixed names
+- Converts relative paths to absolute based on file location
+- Prefixes resources with directory names (e.g., `web_`, `db_`)
+- Resolves port conflicts by adding offsets
+- Updates volume mounts to match prefixed names
+- Maintains service dependencies and links
 
 ### Safety Features
-
-- **Dry Run Mode**: Preview all changes before applying
-- **Validation**: Checks for invalid configurations
-- **Clear Logging**: Shows exactly what's being changed
-- **Error Handling**: Clear messages for common issues
+- Preview mode to review changes
+- Configuration validation
+- Detailed logging
+- Clear error messages
 
 ## Contributing
 
-Found a DX issue we haven't solved? Contributions are welcome! Please feel free to submit a Pull Request.
+Found a problem we haven't solved? Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
