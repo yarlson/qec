@@ -2,6 +2,18 @@
 
 `qec` makes working with multiple Docker Compose files simple and predictable. It automatically handles path adjustments, naming conflicts, and port collisions when combining microservices from different directories.
 
+## About
+
+`qec` is a command-line tool that extends Docker Compose to intelligently handle multiple compose files. It solves common microservices orchestration challenges by:
+
+- Maintaining correct build contexts for each service's directory
+- Automatically prefixing service names to prevent conflicts
+- Resolving port collisions with smart offset calculation
+- Keeping volume data isolated between services
+- Preserving service dependencies across files
+
+It acts as a drop-in replacement for `docker-compose`, requiring minimal changes to your existing workflow.
+
 ## Common Problems Solved
 
 ### 1. Build Context Resolution
