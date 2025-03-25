@@ -4,14 +4,19 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gihub.com/yarlson/qec/compose"
 	"github.com/sirupsen/logrus"
 )
 
-var composeFiles multiFlag
-var verbose bool
-var dryRun bool
+var (
+	composeFiles multiFlag
+	verbose      bool
+	dryRun       bool
+	detach       bool
+	command      string
+)
 
 // multiFlag is a custom flag type to handle multiple -f options
 type multiFlag []string
@@ -58,29 +63,39 @@ func run() error {
 		return fmt.Errorf("error merging compose files: %v", err)
 	}
 
-	// Output the merged configuration
-	yaml, err := merged.MarshalYAML()
-	if err != nil {
-		return fmt.Errorf("error marshaling merged configuration: %v", err)
+	// Create an executor with the merged configuration
+	workingDir := filepath.Dir(composeFiles[0])
+	executor := compose.NewExecutor(merged, workingDir, dryRun, logger.WithField("component", "executor"))
+
+	// Execute the requested command
+	switch command {
+	case "up":
+		if err := executor.Up(detach); err != nil {
+			return fmt.Errorf("error executing up command: %v", err)
+		}
+	case "down":
+		if err := executor.Down(); err != nil {
+			return fmt.Errorf("error executing down command: %v", err)
+		}
+	case "config":
+		if err := executor.Config(); err != nil {
+			return fmt.Errorf("error executing config command: %v", err)
+		}
+	default:
+		return fmt.Errorf("unknown command: %s", command)
 	}
 
-	fmt.Println(string(yaml))
-
-	if dryRun {
-		logger.Info("Dry run completed successfully")
-		return nil
-	}
-
-	// TODO: Implement actual runtime changes here
-	logger.Info("Configuration applied successfully")
+	logger.Info("Command executed successfully")
 	return nil
 }
 
 func main() {
-	// Register the -f flag to accept multiple entries
+	// Register flags
 	flag.Var(&composeFiles, "f", "Path to a docker-compose YAML file (can be specified multiple times)")
 	flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 	flag.BoolVar(&dryRun, "dry-run", false, "Simulate configuration without making runtime changes")
+	flag.BoolVar(&detach, "d", false, "Run containers in the background")
+	flag.StringVar(&command, "command", "up", "Command to execute (up, down, or config)")
 	flag.Parse()
 
 	if err := run(); err != nil {

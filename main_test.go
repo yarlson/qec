@@ -177,28 +177,28 @@ services:
 			name:    "normal run",
 			verbose: false,
 			dryRun:  false,
-			args:    []string{"-f", testFile},
+			args:    []string{"-f", testFile, "-command", "config"},
 			wantErr: false,
 		},
 		{
 			name:    "verbose run",
 			verbose: true,
 			dryRun:  false,
-			args:    []string{"-f", testFile, "--verbose"},
+			args:    []string{"-f", testFile, "--verbose", "-command", "config"},
 			wantErr: false,
 		},
 		{
 			name:    "dry run",
 			verbose: false,
 			dryRun:  true,
-			args:    []string{"-f", testFile, "--dry-run"},
+			args:    []string{"-f", testFile, "--dry-run", "-command", "config"},
 			wantErr: false,
 		},
 		{
 			name:    "verbose dry run",
 			verbose: true,
 			dryRun:  true,
-			args:    []string{"-f", testFile, "--verbose", "--dry-run"},
+			args:    []string{"-f", testFile, "--verbose", "--dry-run", "-command", "config"},
 			wantErr: false,
 		},
 		{
@@ -217,11 +217,13 @@ services:
 			composeFiles = nil
 			verbose = false
 			dryRun = false
+			command = "up"
 
 			// Register flags
 			flag.Var(&composeFiles, "f", "Path to a docker-compose YAML file (can be specified multiple times)")
 			flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
 			flag.BoolVar(&dryRun, "dry-run", false, "Simulate configuration without making runtime changes")
+			flag.StringVar(&command, "command", "up", "Command to execute (up, down, or config)")
 
 			// Parse flags
 			err := flag.CommandLine.Parse(tt.args)
