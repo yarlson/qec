@@ -20,29 +20,29 @@ services:
 ```
 
 ### 2. Service Name and Port Conflicts
-Multiple services often share the same names or want the same ports. `qec` handles this automatically:
+Multiple services often share the same names or want the same ports. `qec` handles this automatically by prefixing service names with their directory and offsetting conflicting ports by 100:
 
 ```yaml
 # Before
 # web/docker-compose.yml
 services:
   api:
-    ports: ["3000:3000"]
+    ports: ["80:80"]
 # db/docker-compose.yml
 services:
   api:
-    ports: ["3000:3000"]
+    ports: ["80:80"]
 
 # After (automatically handled)
 services:
   web_api:
-    ports: ["3000:3000"]
+    ports: ["80:80"]  # First file keeps original port
   db_api:
-    ports: ["3100:3000"]
+    ports: ["180:80"]  # Second file gets offset by 100
 ```
 
 ### 3. Volume Name Conflicts
-Shared volume names between different compose files can lead to data mixing. `qec` keeps data isolated:
+Shared volume names between different compose files can lead to data mixing. `qec` keeps data isolated by prefixing volume names with their directory name:
 
 ```yaml
 # Before
@@ -63,19 +63,20 @@ volumes:
 # After (automatically isolated)
 services:
   web_api:
-    volumes: ["web_data:/app/data"]
+    volumes: ["web_web_data:/app/data"]  # Directory name is used as prefix
   db_postgres:
-    volumes: ["db_data:/var/lib/postgresql/data"]
+    volumes: ["db_db_data:/var/lib/postgresql/data"]  # Directory name is used as prefix
 volumes:
-  web_data:
-  db_data:
+  web_web_data:  # Volume names get directory prefix
+  db_db_data:
 ```
 
 ### 4. Service Dependencies
-References between services break when combining files. `qec` maintains all connections:
+References between services break when combining files. `qec` maintains all connections by updating references with directory prefixes:
 
 ```yaml
 # Before
+# web/docker-compose.yml
 services:
   api:
     depends_on: ["redis", "postgres"]
@@ -86,11 +87,11 @@ services:
 
 # After (all references updated)
 services:
-  cache_api:
-    depends_on: ["cache_redis", "db_postgres"]
-  cache_redis:
+  web_api:
+    depends_on: ["web_redis", "web_postgres"]  # References updated with directory prefix
+  web_redis:
     image: redis
-  db_postgres:
+  web_postgres:
     image: postgres
 ```
 
@@ -134,7 +135,7 @@ go install github.com/yarlson/qec@latest
 ### Automatic Adjustments
 - Converts relative paths to absolute based on file location
 - Prefixes resources with directory names (e.g., `web_`, `db_`)
-- Resolves port conflicts by adding offsets
+- Resolves port conflicts by adding offset of 100 to subsequent files
 - Updates volume mounts to match prefixed names
 - Maintains service dependencies and links
 
