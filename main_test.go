@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -245,4 +247,128 @@ services:
 			assert.Equal(t, tt.dryRun, dryRun, "dry-run flag mismatch")
 		})
 	}
+}
+
+// TestHelpFlag tests the help flag functionality
+func TestHelpFlag(t *testing.T) {
+	// Test cases
+	tests := []struct {
+		name     string
+		args     []string
+		wantHelp bool
+	}{
+		{
+			name:     "help long flag",
+			args:     []string{"--help"},
+			wantHelp: true,
+		},
+		{
+			name:     "help short flag",
+			args:     []string{"-h"},
+			wantHelp: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Reset flags and global variables
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			composeFiles = nil
+			verbose = false
+			dryRun = false
+			command = "up"
+			showHelp = false
+
+			// Register flags
+			flag.Var(&composeFiles, "f", "Path to a docker-compose YAML file (can be specified multiple times)")
+			flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging for detailed output")
+			flag.BoolVar(&dryRun, "dry-run", false, "Simulate configuration without making runtime changes")
+			flag.BoolVar(&detach, "d", false, "Run containers in the background")
+			flag.StringVar(&command, "command", "up", "Command to execute (up, down, config, ps, logs, build, pull, push)")
+			flag.BoolVar(&showHelp, "help", false, "Show help text")
+			flag.BoolVar(&showHelp, "h", false, "Show help text")
+
+			// Set custom usage function
+			flag.Usage = func() {
+				fmt.Print(helpText)
+			}
+
+			// Parse flags
+			err := flag.CommandLine.Parse(tt.args)
+			require.NoError(t, err)
+
+			err = run()
+			require.NoError(t, err)
+
+			// Close writer and restore stdout
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Get captured output
+			outC := make(chan string)
+			go func() {
+				var buf bytes.Buffer
+				_, _ = buf.ReadFrom(r)
+				outC <- buf.String()
+			}()
+
+			// Get captured output
+			output := <-outC
+
+			// Verify help text
+			if tt.wantHelp {
+				assert.Contains(t, output, "qec - Quantum Entanglement Communicator for Docker Compose")
+				assert.Contains(t, output, "Usage:")
+				assert.Contains(t, output, "Options:")
+				assert.Contains(t, output, "Commands:")
+				assert.Contains(t, output, "Examples:")
+			}
+		})
+	}
+}
+
+// TestUsageFunction tests the usage function separately
+func TestUsageFunction(t *testing.T) {
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Reset flags
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Set custom usage function
+	flag.Usage = func() {
+		fmt.Print(helpText)
+	}
+
+	// Call usage function
+	flag.Usage()
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Get captured output
+	outC := make(chan string)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(r)
+		outC <- buf.String()
+	}()
+
+	// Get captured output
+	output := <-outC
+
+	// Verify help text
+	assert.Contains(t, output, "qec - Quantum Entanglement Communicator for Docker Compose")
+	assert.Contains(t, output, "Usage:")
+	assert.Contains(t, output, "Options:")
+	assert.Contains(t, output, "Commands:")
+	assert.Contains(t, output, "Examples:")
 }
