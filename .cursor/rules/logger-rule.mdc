@@ -1,0 +1,25 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Generate log statements using logrus. In each function, initialize a local logger once—do not reinitialize it inside loops. Use `logrus.WithFields()` to add structured context when available, otherwise log directly. Use `Debug()` for detailed steps, `Info()` for successes, and `Error()` (optionally with `WithError(err)`) for failures. Each log message must clearly state the action and include context only when necessary.
+
+*Example:*
+```go
+func processItems(items []string) {
+    // Initialize the logger once with context for the function.
+    logger := logrus.WithFields(logrus.Fields{
+        "function": "processItems",
+    })
+
+    logger.Debug("Starting processing items")
+    
+    for i, item := range items {
+        // Use the same logger instance without redefining it.
+        logger.Debugf("Processing item %d: %s", i, item)
+    }
+    
+    logger.Info("Finished processing items")
+}
+```

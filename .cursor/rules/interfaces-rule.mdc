@@ -1,0 +1,48 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When writing Go interfaces, follow these guidelines:
+- Keep interfaces minimal and focused on a single responsibility.
+- Define interfaces close to where they are consumed.
+- Name them after the behavior (e.g., `Reader`, `Writer`), not the implementation.
+- Use dependency injection so consumers only depend on the interface.
+- Return errors where necessary.
+
+*Example:*
+```go
+// Reader defines a minimal interface for reading data.
+type Reader interface {
+    Read() (string, error)
+}
+
+// Writer defines a minimal interface for writing data.
+type Writer interface {
+    Write(data string) error
+}
+
+// Processor uses Reader and Writer.
+type Processor struct {
+    reader Reader
+    writer Writer
+}
+
+func NewProcessor(r Reader, w Writer) *Processor {
+    return &Processor{reader: r, writer: w}
+}
+
+func (p *Processor) Process() error {
+    data, err := p.reader.Read()
+    if err != nil {
+        return fmt.Errorf("read error: %w", err)
+    }
+    processed := strings.ToUpper(data)
+    if err := p.writer.Write(processed); err != nil {
+        return fmt.Errorf("write error: %w", err)
+    }
+    return nil
+}
+```
+
+Use this as a template for writing clear, consumer-friendly interfaces in Go.

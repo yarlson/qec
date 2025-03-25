@@ -1,0 +1,49 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+When writing Go tests, use Testify and its test suite to structure and organize your tests. Follow these guidelines:
+- Use the suite package to define a test suite struct that embeds `suite.Suite`.
+- Implement setup and teardown methods (like `SetupTest` and `TearDownTest`) for common initialization and cleanup.
+- Write test methods with names starting with `Test` and use Testify's assertion functions.
+- Keep tests focused on behavior verification and clear in intent.
+
+*Example:*
+```go
+package mypackage
+
+import (
+    "testing"
+    "strings"
+    "fmt"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/suite"
+)
+
+// Define the test suite.
+type ProcessorTestSuite struct {
+    suite.Suite
+    input string
+}
+
+// SetupTest runs before each test.
+func (suite *ProcessorTestSuite) SetupTest() {
+    suite.input = "hello"
+}
+
+// Test method for processing.
+func (suite *ProcessorTestSuite) TestProcess() {
+    result := strings.ToUpper(suite.input)
+    expected := "HELLO"
+    assert.Equal(suite.T(), expected, result, "Expected uppercase conversion")
+}
+
+// Run the test suite.
+func TestProcessorTestSuite(t *testing.T) {
+    suite.Run(t, new(ProcessorTestSuite))
+}
+```
+
+Use this template as a guide to write concise, maintainable, and behavior-focused Go tests with Testify and its test suite.
