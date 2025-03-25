@@ -3,6 +3,7 @@ package compose
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/compose-spec/compose-go/v2/types"
@@ -69,7 +70,7 @@ func (cf *ComposeFile) adjustBuildContexts() error {
 	return nil
 }
 
-// MergeComposeFiles merges multiple compose files, adjusting build contexts and handling overrides
+// MergeComposeFiles merges multiple compose files
 func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no compose files provided")
@@ -83,6 +84,12 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 		return nil, fmt.Errorf("failed to adjust build contexts for %s: %w", files[0].Path, err)
 	}
 
+	// Get prefix from base directory name
+	basePrefix := filepath.Base(files[0].BaseDir)
+	if err := files[0].prefixResourceNames(basePrefix); err != nil {
+		return nil, fmt.Errorf("failed to prefix resource names for %s: %w", files[0].Path, err)
+	}
+
 	// Merge additional files
 	for i := 1; i < len(files); i++ {
 		cf := files[i]
@@ -92,97 +99,145 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 			return nil, fmt.Errorf("failed to adjust build contexts for %s: %w", cf.Path, err)
 		}
 
-		// Merge services
-		for name, service := range cf.Project.Services {
-			if existing, exists := baseProject.Services[name]; exists {
-				// Service exists in base project, merge configurations
-				merged, err := mergeServices(&existing, &service)
-				if err != nil {
-					return nil, fmt.Errorf("failed to merge service %s: %w", name, err)
-				}
-				baseProject.Services[name] = *merged
-			} else {
-				// New service, add it to base project
-				baseProject.Services[name] = service
-			}
+		// Get prefix from directory name
+		prefix := filepath.Base(cf.BaseDir)
+		if err := cf.prefixResourceNames(prefix); err != nil {
+			return nil, fmt.Errorf("failed to prefix resource names for %s: %w", cf.Path, err)
 		}
 
-		// Merge volumes
-		for name, volume := range cf.Project.Volumes {
-			if _, exists := baseProject.Volumes[name]; !exists {
-				if baseProject.Volumes == nil {
-					baseProject.Volumes = make(types.Volumes)
-				}
+		// Merge services (they are already prefixed)
+		for name, service := range cf.Project.Services {
+			baseProject.Services[name] = service
+		}
+
+		// Merge volumes (they are already prefixed)
+		if cf.Project.Volumes != nil {
+			if baseProject.Volumes == nil {
+				baseProject.Volumes = make(types.Volumes)
+			}
+			for name, volume := range cf.Project.Volumes {
 				baseProject.Volumes[name] = volume
 			}
-			// If volume exists, keep the first definition (from base project)
 		}
 
 		// Merge networks
-		for name, network := range cf.Project.Networks {
-			if _, exists := baseProject.Networks[name]; !exists {
-				if baseProject.Networks == nil {
-					baseProject.Networks = make(types.Networks)
-				}
+		if cf.Project.Networks != nil {
+			if baseProject.Networks == nil {
+				baseProject.Networks = make(types.Networks)
+			}
+			for name, network := range cf.Project.Networks {
 				baseProject.Networks[name] = network
 			}
-			// If network exists, keep the first definition (from base project)
+		}
+
+		// Merge configs (they are already prefixed)
+		if cf.Project.Configs != nil {
+			if baseProject.Configs == nil {
+				baseProject.Configs = make(types.Configs)
+			}
+			for name, config := range cf.Project.Configs {
+				baseProject.Configs[name] = config
+			}
+		}
+
+		// Merge secrets (they are already prefixed)
+		if cf.Project.Secrets != nil {
+			if baseProject.Secrets == nil {
+				baseProject.Secrets = make(types.Secrets)
+			}
+			for name, secret := range cf.Project.Secrets {
+				baseProject.Secrets[name] = secret
+			}
 		}
 	}
 
 	return baseProject, nil
 }
 
-// mergeServices merges two service configurations
-func mergeServices(base, override *types.ServiceConfig) (*types.ServiceConfig, error) {
-	// Create a copy of the base service
-	merged := *base
+// prefixResourceNames prefixes all resource names (services, volumes, configs, secrets) with the given prefix
+func (cf *ComposeFile) prefixResourceNames(prefix string) error {
+	// Create a map to store old name to new name mappings for dependency updates
+	nameMap := make(map[string]string)
 
-	// Override simple fields if they're set in the override
-	if override.Image != "" {
-		merged.Image = override.Image
+	// Prefix services
+	newServices := make(types.Services)
+	for name, service := range cf.Project.Services {
+		newName := prefix + "_" + name
+		nameMap[name] = newName
+		newServices[newName] = service
+		cf.logger.Debugf("Prefixed service name from %s to %s", name, newName)
 	}
-	if override.Build != nil {
-		merged.Build = override.Build
-	}
-	if override.Command != nil {
-		merged.Command = override.Command
-	}
+	cf.Project.Services = newServices
 
-	// Merge environment variables
-	for k, v := range override.Environment {
-		if merged.Environment == nil {
-			merged.Environment = make(types.MappingWithEquals)
+	// Prefix volumes
+	if cf.Project.Volumes != nil {
+		newVolumes := make(types.Volumes)
+		for name, volume := range cf.Project.Volumes {
+			newName := prefix + "_" + name
+			nameMap[name] = newName
+			newVolumes[newName] = volume
+			cf.logger.Debugf("Prefixed volume name from %s to %s", name, newName)
 		}
-		merged.Environment[k] = v
+		cf.Project.Volumes = newVolumes
 	}
 
-	// Merge ports (keep base ports if there's a conflict)
-	portMap := make(map[string]bool)
-	for _, port := range merged.Ports {
-		key := fmt.Sprintf("%s:%d", port.Published, port.Target)
-		portMap[key] = true
+	// Prefix configs
+	if cf.Project.Configs != nil {
+		newConfigs := make(types.Configs)
+		for name, config := range cf.Project.Configs {
+			newName := prefix + "_" + name
+			nameMap[name] = newName
+			newConfigs[newName] = config
+			cf.logger.Debugf("Prefixed config name from %s to %s", name, newName)
+		}
+		cf.Project.Configs = newConfigs
 	}
 
-	for _, port := range override.Ports {
-		key := fmt.Sprintf("%s:%d", port.Published, port.Target)
-		if !portMap[key] {
-			merged.Ports = append(merged.Ports, port)
+	// Prefix secrets
+	if cf.Project.Secrets != nil {
+		newSecrets := make(types.Secrets)
+		for name, secret := range cf.Project.Secrets {
+			newName := prefix + "_" + name
+			nameMap[name] = newName
+			newSecrets[newName] = secret
+			cf.logger.Debugf("Prefixed secret name from %s to %s", name, newName)
+		}
+		cf.Project.Secrets = newSecrets
+	}
+
+	// Update service dependencies to use prefixed names
+	for name, service := range cf.Project.Services {
+		// Update depends_on references
+		if service.DependsOn != nil {
+			newDependsOn := make(types.DependsOnConfig)
+			for depName, config := range service.DependsOn {
+				newName := prefix + "_" + depName
+				newDependsOn[newName] = config
+				cf.logger.Debugf("Updated dependency from %s to %s", depName, newName)
+			}
+			service.DependsOn = newDependsOn
+			cf.Project.Services[name] = service
+		}
+
+		// Update links references
+		if service.Links != nil {
+			newLinks := make([]string, len(service.Links))
+			for i, link := range service.Links {
+				parts := strings.Split(link, ":")
+				if len(parts) == 2 {
+					newName := prefix + "_" + parts[0]
+					newLinks[i] = newName + ":" + parts[1]
+					cf.logger.Debugf("Updated link from %s to %s", link, newLinks[i])
+				} else {
+					newName := prefix + "_" + link
+					newLinks[i] = newName
+					cf.logger.Debugf("Updated link from %s to %s", link, newName)
+				}
+			}
+			service.Links = newLinks
+			cf.Project.Services[name] = service
 		}
 	}
 
-	// Merge volumes
-	merged.Volumes = append(merged.Volumes, override.Volumes...)
-
-	// Merge depends_on
-	if override.DependsOn != nil {
-		if merged.DependsOn == nil {
-			merged.DependsOn = make(types.DependsOnConfig)
-		}
-		for service, config := range override.DependsOn {
-			merged.DependsOn[service] = config
-		}
-	}
-
-	return &merged, nil
+	return nil
 }

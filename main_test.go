@@ -56,8 +56,11 @@ func TestMultipleComposeFiles(t *testing.T) {
 	// Create a temporary directory for test files
 	tmpDir := t.TempDir()
 
-	// Create the first compose file
-	file1 := filepath.Join(tmpDir, "docker-compose-1.yml")
+	// Create the first compose file in a subdirectory
+	folder1 := filepath.Join(tmpDir, "folder1")
+	err := os.MkdirAll(folder1, 0755)
+	require.NoError(t, err)
+	file1 := filepath.Join(folder1, "docker-compose.yml")
 	content1 := []byte(`
 version: '3'
 services:
@@ -72,11 +75,14 @@ services:
     ports:
       - "6379:6379"
 `)
-	err := os.WriteFile(file1, content1, 0644)
+	err = os.WriteFile(file1, content1, 0644)
 	require.NoError(t, err)
 
-	// Create the second compose file
-	file2 := filepath.Join(tmpDir, "docker-compose-2.yml")
+	// Create the second compose file in a different subdirectory
+	folder2 := filepath.Join(tmpDir, "folder2")
+	err = os.MkdirAll(folder2, 0755)
+	require.NoError(t, err)
+	file2 := filepath.Join(folder2, "docker-compose.yml")
 	content2 := []byte(`
 version: '3'
 services:
@@ -94,9 +100,9 @@ services:
 	require.NoError(t, err)
 
 	// Create necessary directories
-	err = os.MkdirAll(filepath.Join(tmpDir, "app1"), 0755)
+	err = os.MkdirAll(filepath.Join(folder1, "app1"), 0755)
 	require.NoError(t, err)
-	err = os.MkdirAll(filepath.Join(tmpDir, "app1-override"), 0755)
+	err = os.MkdirAll(filepath.Join(folder2, "app1-override"), 0755)
 	require.NoError(t, err)
 
 	// Create a logger for testing
@@ -112,21 +118,25 @@ services:
 	require.NoError(t, err)
 
 	// Verify merged configuration
-	assert.Len(t, merged.Services, 3)
+	assert.Len(t, merged.Services, 4)
 
-	// Check app1 (merged service)
-	app1 := merged.Services["app1"]
-	assert.Equal(t, "nginx", app1.Image)
-	assert.Equal(t, filepath.Join(tmpDir, "app1-override"), app1.Build.Context)
-	assert.Contains(t, app1.Environment, "DEBUG")
+	// Check app1 from folder1
+	folder1App1 := merged.Services["folder1_app1"]
+	assert.Equal(t, "nginx", folder1App1.Image)
+	assert.Equal(t, filepath.Join(folder1, "app1"), folder1App1.Build.Context)
 
-	// Check app2 (from first file only)
-	app2 := merged.Services["app2"]
-	assert.Equal(t, "redis", app2.Image)
-	assert.Equal(t, uint32(6379), app2.Ports[0].Target)
+	// Check app2 from folder1
+	folder1App2 := merged.Services["folder1_app2"]
+	assert.Equal(t, "redis", folder1App2.Image)
+	assert.Equal(t, uint32(6379), folder1App2.Ports[0].Target)
 
-	// Check app3 (from second file only)
-	app3 := merged.Services["app3"]
-	assert.Equal(t, "postgres", app3.Image)
-	assert.Equal(t, uint32(5432), app3.Ports[0].Target)
+	// Check app1 from folder2
+	folder2App1 := merged.Services["folder2_app1"]
+	assert.Equal(t, filepath.Join(folder2, "app1-override"), folder2App1.Build.Context)
+	assert.Contains(t, folder2App1.Environment, "DEBUG")
+
+	// Check app3 from folder2
+	folder2App3 := merged.Services["folder2_app3"]
+	assert.Equal(t, "postgres", folder2App3.Image)
+	assert.Equal(t, uint32(5432), folder2App3.Ports[0].Target)
 }
