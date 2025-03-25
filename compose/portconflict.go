@@ -23,7 +23,7 @@ func DetectPortConflicts(services types.Services, logger *logrus.Entry) map[uint
 	// Iterate through all services
 	for name, service := range services {
 		// Skip services without port mappings
-		if service.Ports == nil || len(service.Ports) == 0 {
+		if len(service.Ports) == 0 {
 			continue
 		}
 
@@ -76,7 +76,7 @@ func ResolvePortConflicts(services types.Services, offset uint32, logger *logrus
 
 	// Iterate through all services and adjust conflicting ports
 	for name, service := range services {
-		if service.Ports == nil || len(service.Ports) == 0 {
+		if len(service.Ports) == 0 {
 			continue
 		}
 
