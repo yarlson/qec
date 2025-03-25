@@ -188,6 +188,25 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 		cf.Project.Volumes = newVolumes
 	}
 
+	// Update service volume references
+	for name, service := range cf.Project.Services {
+		if service.Volumes != nil {
+			newVolumes := make([]types.ServiceVolumeConfig, len(service.Volumes))
+			for i, volume := range service.Volumes {
+				if volume.Source != "" {
+					// If the volume source is a named volume, update its reference
+					if newName, ok := nameMap[volume.Source]; ok {
+						volume.Source = newName
+						cf.logger.Debugf("Updated volume reference in service %s from %s to %s", name, volume.Source, newName)
+					}
+				}
+				newVolumes[i] = volume
+			}
+			service.Volumes = newVolumes
+			cf.Project.Services[name] = service
+		}
+	}
+
 	// Prefix configs
 	if cf.Project.Configs != nil {
 		newConfigs := make(types.Configs)
