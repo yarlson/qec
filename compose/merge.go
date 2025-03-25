@@ -151,6 +151,12 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 		}
 	}
 
+	// After merging all files, resolve any port conflicts
+	logger := files[0].logger.WithField("component", "port_resolver")
+	if err := ResolvePortConflicts(baseProject.Services, 100, logger); err != nil {
+		return nil, fmt.Errorf("failed to resolve port conflicts: %w", err)
+	}
+
 	return baseProject, nil
 }
 

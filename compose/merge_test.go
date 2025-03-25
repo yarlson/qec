@@ -331,3 +331,84 @@ volumes:
 	folder2App := merged.Services["folder2_app"]
 	assert.Contains(t, folder2App.DependsOn, "folder2_db")
 }
+
+func TestMergeComposeFilesWithPortConflicts(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// Create the first compose file
+	file1 := filepath.Join(tmpDir, "folder1", "docker-compose.yml")
+	err := os.MkdirAll(filepath.Dir(file1), 0755)
+	require.NoError(t, err)
+	content1 := []byte(`
+version: '3'
+services:
+  web:
+    image: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+`)
+	err = os.WriteFile(file1, content1, 0644)
+	require.NoError(t, err)
+
+	// Create the second compose file with conflicting ports
+	file2 := filepath.Join(tmpDir, "folder2", "docker-compose.yml")
+	err = os.MkdirAll(filepath.Dir(file2), 0755)
+	require.NoError(t, err)
+	content2 := []byte(`
+version: '3'
+services:
+  web:
+    image: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+  postgres:
+    image: postgres
+    ports:
+      - "5432:5432"
+`)
+	err = os.WriteFile(file2, content2, 0644)
+	require.NoError(t, err)
+
+	// Create a logger for testing
+	logger := logrus.New().WithField("test", true)
+
+	// Load and merge the compose files
+	cf1, err := NewComposeFile(file1, logger)
+	require.NoError(t, err)
+	cf2, err := NewComposeFile(file2, logger)
+	require.NoError(t, err)
+
+	merged, err := MergeComposeFiles([]*ComposeFile{cf1, cf2})
+	require.NoError(t, err)
+
+	// Verify that services from both files are present with correct prefixes
+	assert.Contains(t, merged.Services, "folder1_web")
+	assert.Contains(t, merged.Services, "folder1_redis")
+	assert.Contains(t, merged.Services, "folder2_web")
+	assert.Contains(t, merged.Services, "folder2_postgres")
+
+	// Verify that port conflicts are resolved
+	folder1Web := merged.Services["folder1_web"]
+	folder2Web := merged.Services["folder2_web"]
+
+	// First file's services should keep their original ports
+	assert.Equal(t, "80", folder1Web.Ports[0].Published)
+	assert.Equal(t, "443", folder1Web.Ports[1].Published)
+
+	// Second file's services should have their ports adjusted
+	assert.Equal(t, "180", folder2Web.Ports[0].Published)
+	assert.Equal(t, "543", folder2Web.Ports[1].Published)
+
+	// Non-conflicting ports should remain unchanged
+	folder1Redis := merged.Services["folder1_redis"]
+	folder2Postgres := merged.Services["folder2_postgres"]
+	assert.Equal(t, "6379", folder1Redis.Ports[0].Published)
+	assert.Equal(t, "5432", folder2Postgres.Ports[0].Published)
+}
