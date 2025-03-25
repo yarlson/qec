@@ -14,9 +14,8 @@ import (
 // MergeTestSuite defines the test suite for merge functionality
 type MergeTestSuite struct {
 	suite.Suite
-	logger  *logrus.Entry
-	tmpDir  string
-	cleanup func()
+	logger *logrus.Entry
+	tmpDir string
 }
 
 // SetupTest runs before each test

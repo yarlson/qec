@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -139,4 +140,107 @@ services:
 	folder2App3 := merged.Services["folder2_app3"]
 	assert.Equal(t, "postgres", folder2App3.Image)
 	assert.Equal(t, uint32(5432), folder2App3.Ports[0].Target)
+}
+
+func TestVerboseAndDryRunFlags(t *testing.T) {
+	// Create a temporary directory for test files
+	tmpDir := t.TempDir()
+
+	// Create a test compose file
+	testFile := filepath.Join(tmpDir, "docker-compose.yml")
+	content := []byte(`
+version: '3'
+services:
+  app:
+    image: nginx
+    build:
+      context: ./app
+    ports:
+      - "80:80"
+`)
+	err := os.WriteFile(testFile, content, 0644)
+	require.NoError(t, err)
+
+	// Create necessary directories
+	err = os.MkdirAll(filepath.Join(tmpDir, "app"), 0755)
+	require.NoError(t, err)
+
+	// Test cases
+	tests := []struct {
+		name    string
+		verbose bool
+		dryRun  bool
+		args    []string
+		wantErr bool
+	}{
+		{
+			name:    "normal run",
+			verbose: false,
+			dryRun:  false,
+			args:    []string{"-f", testFile},
+			wantErr: false,
+		},
+		{
+			name:    "verbose run",
+			verbose: true,
+			dryRun:  false,
+			args:    []string{"-f", testFile, "--verbose"},
+			wantErr: false,
+		},
+		{
+			name:    "dry run",
+			verbose: false,
+			dryRun:  true,
+			args:    []string{"-f", testFile, "--dry-run"},
+			wantErr: false,
+		},
+		{
+			name:    "verbose dry run",
+			verbose: true,
+			dryRun:  true,
+			args:    []string{"-f", testFile, "--verbose", "--dry-run"},
+			wantErr: false,
+		},
+		{
+			name:    "no files specified",
+			verbose: false,
+			dryRun:  false,
+			args:    []string{},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset flags and global variables before each test
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+			composeFiles = nil
+			verbose = false
+			dryRun = false
+
+			// Register flags
+			flag.Var(&composeFiles, "f", "Path to a docker-compose YAML file (can be specified multiple times)")
+			flag.BoolVar(&verbose, "verbose", false, "Enable verbose logging")
+			flag.BoolVar(&dryRun, "dry-run", false, "Simulate configuration without making runtime changes")
+
+			// Parse flags
+			err := flag.CommandLine.Parse(tt.args)
+			require.NoError(t, err)
+
+			// Run the program
+			err = run()
+
+			// Verify error
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "no compose files specified")
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Verify flag values
+			assert.Equal(t, tt.verbose, verbose, "verbose flag mismatch")
+			assert.Equal(t, tt.dryRun, dryRun, "dry-run flag mismatch")
+		})
+	}
 }
