@@ -4,13 +4,43 @@
 
 ## Features
 
-- **Docker Compose CLI Compatible**: Uses the same command-line interface as Docker Compose
-- **Automatic Context Path Handling**: Each compose file uses its own directory as the base path
-- **Smart Resource Naming**: Automatically prefixes services, volumes, and other resources with their source folder name to avoid conflicts
-- **Port Conflict Resolution**: Intelligently handles port mapping conflicts between files
-- **Dependency Management**: Automatically updates service dependencies to match prefixed names
-- **Dry Run Support**: Preview changes without applying them
-- **Verbose Logging**: Detailed logging of all adjustments and changes
+- **Docker Compose CLI Compatible**: 
+  - Supports both standalone `docker-compose` and the newer Docker Compose plugin
+  - Preserves Docker Compose's command-line interface and functionality
+  - Automatically detects and uses the appropriate Docker Compose executable
+
+- **Automatic Context Path Handling**: 
+  - Each compose file uses its own directory as the base path
+  - Automatically converts relative build contexts to absolute paths
+  - Preserves absolute paths when already specified
+  - Supports `.env` file discovery in each compose file's directory
+
+- **Smart Resource Naming**: 
+  - Prefixes services, volumes, configs, and secrets with their source folder name
+  - Updates all internal references to maintain consistency:
+    - Service dependencies (`depends_on`)
+    - Service links
+    - Volume mounts
+    - Config and secret references
+
+- **Port Conflict Resolution**: 
+  - Detects port conflicts between services
+  - Resolves conflicts by applying an offset to subsequent services
+  - Maintains original port mappings for the first occurrence
+  - Logs all port adjustments for transparency
+
+- **Logging and Debugging**:
+  - Detailed logging of all operations with `--verbose` flag
+  - Logs include:
+    - Build context adjustments
+    - Resource name prefixing
+    - Port conflict resolutions
+    - Command execution details
+
+- **Dry Run Support**: 
+  - Preview changes without applying them using `--dry-run`
+  - Shows the merged configuration and planned actions
+  - Validates the configuration without executing commands
 
 ## Installation
 
@@ -31,9 +61,11 @@ qec [OPTIONS] COMMAND [ARGS...]
 - `--dry-run`: Simulate configuration without making runtime changes
 - `--verbose`: Enable verbose logging
 - `--command COMMAND`: Command to execute (default: "up")
+- `-h, --help`: Show help text
 
 ### Commands
 
+All standard Docker Compose commands are supported:
 - `up`: Create and start containers
 - `down`: Stop and remove containers, networks, and volumes
 - `ps`: List containers
@@ -48,53 +80,136 @@ qec [OPTIONS] COMMAND [ARGS...]
 ### Running Services from Multiple Compose Files
 
 ```bash
-qec -f folder1/docker-compose.yml -f folder2/docker-compose.yml up -d
+# Start services from multiple directories
+qec -f web/docker-compose.yml -f db/docker-compose.yml up -d
+
+# The tool will:
+# 1. Prefix web services as web_service_name
+# 2. Prefix db services as db_service_name
+# 3. Adjust build contexts to be relative to each file's directory
+# 4. Update all internal references
 ```
 
 ### Viewing Merged Configuration
 
 ```bash
-qec -f folder1/docker-compose.yml -f folder2/docker-compose.yml --command config
+# View the final merged configuration
+qec -f web/docker-compose.yml -f db/docker-compose.yml --command config
+
+# Shows:
+# - Prefixed service names
+# - Adjusted build contexts
+# - Updated dependencies
+# - Resolved port conflicts
 ```
 
-### Dry Run to Preview Changes
+### Dry Run with Verbose Logging
 
 ```bash
-qec -f folder1/docker-compose.yml -f folder2/docker-compose.yml --dry-run up
+# Preview changes with detailed logging
+qec -f web/docker-compose.yml -f db/docker-compose.yml --dry-run --verbose up
+
+# Outputs:
+# - Resource prefixing details
+# - Build context adjustments
+# - Port conflict resolutions
+# - Planned Docker Compose commands
 ```
 
-## How It Works
+## Implementation Details
 
-1. **File Detection**: Identifies each docker-compose file and determines its directory.
+### Resource Prefixing
 
-2. **Merge Process**:
-   - Reads all YAML files
-   - Adjusts each file's context paths to use its folder as the base
-   - Converts relative build contexts to absolute paths
-   - Prefixes all resource names with their folder name
-   - Resolves port conflicts by keeping the first file's definition
-   - Updates service dependencies to include folder prefixes
+The tool prefixes resources based on their source directory:
 
-3. **Execution**:
-   - Merges configurations in memory
-   - Pipes the final configuration directly to Docker Compose
-   - Executes the requested command
+```yaml
+# Original (in web/docker-compose.yml):
+services:
+  frontend:
+    image: nginx
+  api:
+    image: node
+volumes:
+  data:
 
-## Resource Naming
+# Becomes:
+services:
+  web_frontend:
+    image: nginx
+  web_api:
+    image: node
+volumes:
+  web_data:
+```
 
-Resources are automatically prefixed with their source folder name to avoid conflicts:
+### Build Context Handling
 
-- Services: `folder1_service1`, `folder2_service1`
-- Volumes: `folder1_volume1`, `folder2_volume1`
-- Networks: Preserved as-is (shared across files)
-- Configs/Secrets: `folder1_config1`, `folder2_config1`
+Build contexts are automatically adjusted:
 
-## Port Conflict Resolution
+```yaml
+# Original (in web/docker-compose.yml):
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
 
-Port conflicts are resolved based on file order:
-- First file's port mappings take precedence
-- Conflicting mappings in subsequent files are removed
-- Non-conflicting ports are preserved
+# Becomes:
+services:
+  web_api:
+    build:
+      context: /absolute/path/to/web/api
+      dockerfile: Dockerfile
+```
+
+### Port Conflict Resolution
+
+Port conflicts are resolved by adding an offset:
+
+```yaml
+# First file (web/docker-compose.yml):
+services:
+  nginx:
+    ports:
+      - "80:80"      # Kept as is
+
+# Second file (api/docker-compose.yml):
+services:
+  nginx:
+    ports:
+      - "80:80"      # Changed to "180:80"
+```
+
+### Volume References
+
+Volume references are updated to match prefixed names:
+
+```yaml
+# Original:
+services:
+  postgres:
+    volumes:
+      - db_data:/var/lib/postgresql/data
+volumes:
+  db_data:
+
+# Becomes:
+services:
+  db_postgres:
+    volumes:
+      - db_db_data:/var/lib/postgresql/data
+volumes:
+  db_db_data:
+```
+
+## Error Handling
+
+The tool includes comprehensive error handling:
+- Validates Docker Compose installation and version
+- Checks for file existence and YAML validity
+- Verifies build context paths
+- Ensures port conflict resolution is possible
+- Provides clear error messages with context
 
 ## Contributing
 
