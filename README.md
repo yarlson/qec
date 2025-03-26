@@ -4,6 +4,8 @@
 
 ## About
 
+A Docker Compose extension that intelligently handles multiple compose files by automatically resolving path, name, and port conflicts.
+
 `qec` is a command-line tool that extends Docker Compose to intelligently handle multiple compose files. It solves common microservices orchestration challenges by:
 
 - Maintaining correct build contexts for each service's directory
@@ -17,6 +19,7 @@ It acts as a drop-in replacement for `docker-compose`, requiring minimal changes
 ## Common Problems Solved
 
 ### 1. Build Context Resolution
+
 When combining compose files from different directories, Docker Compose defaults to using the first file's directory as the base path. This breaks builds in other directories. `qec` fixes this automatically:
 
 ```yaml
@@ -32,6 +35,7 @@ services:
 ```
 
 ### 2. Service Name and Port Conflicts
+
 Multiple services often share the same names or want the same ports. `qec` handles this automatically by prefixing service names with their directory and offsetting conflicting ports by 100:
 
 ```yaml
@@ -54,6 +58,7 @@ services:
 ```
 
 ### 3. Volume Name Conflicts
+
 Shared volume names between different compose files can lead to data mixing. `qec` keeps data isolated by prefixing volume names with their directory name:
 
 ```yaml
@@ -84,6 +89,7 @@ volumes:
 ```
 
 ### 4. Service Dependencies
+
 References between services break when combining files. `qec` maintains all connections by updating references with directory prefixes:
 
 ```yaml
@@ -145,6 +151,7 @@ go install github.com/yarlson/qec@latest
 ## How It Works
 
 ### Automatic Adjustments
+
 - Converts relative paths to absolute based on file location
 - Prefixes resources with directory names (e.g., `web_`, `db_`)
 - Resolves port conflicts by adding offset of 100 to subsequent files
@@ -152,6 +159,7 @@ go install github.com/yarlson/qec@latest
 - Maintains service dependencies and links
 
 ### Safety Features
+
 - Preview mode to review changes
 - Configuration validation
 - Detailed logging
