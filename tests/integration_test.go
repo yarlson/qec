@@ -1,7 +1,8 @@
-package main
+package tests
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -16,12 +17,31 @@ type IntegrationTestSuite struct {
 	suite.Suite
 	logger *logrus.Entry
 	tmpDir string
+	qecCmd string
 }
 
 // SetupTest runs before each test
 func (suite *IntegrationTestSuite) SetupTest() {
 	suite.logger = logrus.New().WithField("test", true)
 	suite.tmpDir = suite.T().TempDir()
+
+	// Build the qec binary
+	suite.buildQEC()
+}
+
+// buildQEC builds the qec binary for testing
+func (suite *IntegrationTestSuite) buildQEC() {
+	// Get the root directory (parent of tests)
+	rootDir, err := os.Getwd()
+	require.NoError(suite.T(), err)
+	rootDir = filepath.Dir(rootDir)
+
+	// Build the binary from the root directory
+	cmd := exec.Command("go", "build", "-o", filepath.Join(suite.tmpDir, "qec"))
+	cmd.Dir = rootDir
+	output, err := cmd.CombinedOutput()
+	require.NoError(suite.T(), err, "Failed to build qec: %s", output)
+	suite.qecCmd = filepath.Join(suite.tmpDir, "qec")
 }
 
 // createTestFiles creates test compose files and directories
@@ -107,42 +127,36 @@ func (suite *IntegrationTestSuite) TestEndToEndConfig() {
 	// Create test files
 	file1, file2 := suite.createTestFiles()
 
-	// Reset flags and global variables
-	resetFlags()
-	composeFiles = []string{file1, file2}
-	command = "config"
-	verbose = true
-	dryRun = false
+	// Run the config command
+	cmd := exec.Command(suite.qecCmd,
+		"-f", file1,
+		"-f", file2,
+		"--command", "config",
+		"--verbose",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(suite.T(), err, "Failed to run config command: %s", output)
 
-	// Run the program
-	err := run()
-	require.NoError(suite.T(), err)
-
-	// Verify the merged configuration file exists and contains expected content
-	configFile := filepath.Join(filepath.Dir(file1), "docker-compose.merged.yml")
-	content, err := os.ReadFile(configFile)
-	require.NoError(suite.T(), err)
-
-	contentStr := string(content)
+	outputStr := string(output)
 
 	// Check for prefixed service names
-	assert.Contains(suite.T(), contentStr, "web_frontend")
-	assert.Contains(suite.T(), contentStr, "web_api")
-	assert.Contains(suite.T(), contentStr, "db_api")
-	assert.Contains(suite.T(), contentStr, "db_postgres")
+	assert.Contains(suite.T(), outputStr, "web_frontend")
+	assert.Contains(suite.T(), outputStr, "web_api")
+	assert.Contains(suite.T(), outputStr, "db_api")
+	assert.Contains(suite.T(), outputStr, "db_postgres")
 
 	// Check for absolute build contexts
-	assert.Contains(suite.T(), contentStr, filepath.Join(filepath.Dir(file1), "frontend"))
-	assert.Contains(suite.T(), contentStr, filepath.Join(filepath.Dir(file1), "api"))
-	assert.Contains(suite.T(), contentStr, filepath.Join(filepath.Dir(file2), "api-override"))
+	assert.Contains(suite.T(), outputStr, filepath.Join(filepath.Dir(file1), "frontend"))
+	assert.Contains(suite.T(), outputStr, filepath.Join(filepath.Dir(file1), "api"))
+	assert.Contains(suite.T(), outputStr, filepath.Join(filepath.Dir(file2), "api-override"))
 
 	// Check for prefixed volume names
-	assert.Contains(suite.T(), contentStr, "web_web_data")
-	assert.Contains(suite.T(), contentStr, "db_db_data")
+	assert.Contains(suite.T(), outputStr, "web_web_data")
+	assert.Contains(suite.T(), outputStr, "db_db_data")
 
 	// Check for updated dependencies
-	assert.Contains(suite.T(), contentStr, "web_api")
-	assert.Contains(suite.T(), contentStr, "db_postgres")
+	assert.Contains(suite.T(), outputStr, "web_api")
+	assert.Contains(suite.T(), outputStr, "db_postgres")
 }
 
 // TestEndToEndDryRun tests the dry-run functionality
@@ -150,21 +164,21 @@ func (suite *IntegrationTestSuite) TestEndToEndDryRun() {
 	// Create test files
 	file1, file2 := suite.createTestFiles()
 
-	// Reset flags and global variables
-	resetFlags()
-	composeFiles = []string{file1, file2}
-	command = "up"
-	verbose = true
-	dryRun = true
+	// Run the up command in dry-run mode
+	cmd := exec.Command(suite.qecCmd,
+		"-f", file1,
+		"-f", file2,
+		"--dry-run",
+		"--verbose",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(suite.T(), err, "Failed to run dry-run command: %s", output)
 
-	// Run the program
-	err := run()
-	require.NoError(suite.T(), err)
+	outputStr := string(output)
 
-	// Verify the merged configuration file was not created
-	configFile := filepath.Join(filepath.Dir(file1), "docker-compose.merged.yml")
-	_, err = os.Stat(configFile)
-	assert.True(suite.T(), os.IsNotExist(err))
+	// Check for dry-run mode message
+	assert.Contains(suite.T(), outputStr, "Running in dry-run mode")
+	assert.Contains(suite.T(), outputStr, "Dry run: would execute docker compose up")
 }
 
 // TestEndToEndPortConflicts tests port conflict resolution
@@ -197,67 +211,49 @@ func (suite *IntegrationTestSuite) TestEndToEndPortConflicts() {
 	err = os.WriteFile(file2, content2, 0644)
 	require.NoError(suite.T(), err)
 
-	// Reset flags and global variables
-	resetFlags()
-	composeFiles = []string{file1, file2}
-	command = "config"
-	verbose = true
+	// Run the config command
+	cmd := exec.Command(suite.qecCmd,
+		"-f", file1,
+		"-f", file2,
+		"--command", "config",
+		"--verbose",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(suite.T(), err, "Failed to run config command: %s", output)
 
-	// Run the program
-	err = run()
-	require.NoError(suite.T(), err)
-
-	// Verify the merged configuration
-	configFile := filepath.Join(filepath.Dir(file1), "docker-compose.merged.yml")
-	content, err := os.ReadFile(configFile)
-	require.NoError(suite.T(), err)
-
-	contentStr := string(content)
+	outputStr := string(output)
 
 	// Check for port mappings in the expected format
-	assert.Contains(suite.T(), contentStr, `target: 80`)
-	assert.Contains(suite.T(), contentStr, `published: "80"`)
-	assert.Contains(suite.T(), contentStr, `target: 443`)
-	assert.Contains(suite.T(), contentStr, `published: "443"`)
-	assert.Contains(suite.T(), contentStr, `target: 80`)
-	assert.Contains(suite.T(), contentStr, `published: "180"`)
-	assert.Contains(suite.T(), contentStr, `target: 443`)
-	assert.Contains(suite.T(), contentStr, `published: "543"`)
+	assert.Contains(suite.T(), outputStr, `target: 80`)
+	assert.Contains(suite.T(), outputStr, `published: "80"`)
+	assert.Contains(suite.T(), outputStr, `target: 443`)
+	assert.Contains(suite.T(), outputStr, `published: "443"`)
+	assert.Contains(suite.T(), outputStr, `target: 80`)
+	assert.Contains(suite.T(), outputStr, `published: "180"`)
+	assert.Contains(suite.T(), outputStr, `target: 443`)
+	assert.Contains(suite.T(), outputStr, `published: "543"`)
 }
 
 // TestEndToEndErrorHandling tests error scenarios
 func (suite *IntegrationTestSuite) TestEndToEndErrorHandling() {
 	// Test with non-existent file
-	resetFlags()
-	composeFiles = []string{"nonexistent.yml"}
-	command = "up"
-
-	err := run()
+	cmd := exec.Command(suite.qecCmd,
+		"-f", "nonexistent.yml",
+	)
+	output, err := cmd.CombinedOutput()
 	assert.Error(suite.T(), err)
-	assert.Contains(suite.T(), err.Error(), "error loading compose file")
+	assert.Contains(suite.T(), string(output), "error loading compose file")
 
 	// Test with invalid YAML
 	invalidFile := filepath.Join(suite.tmpDir, "invalid.yml")
 	err = os.WriteFile(invalidFile, []byte("invalid: yaml: content"), 0644)
 	require.NoError(suite.T(), err)
 
-	resetFlags()
-	composeFiles = []string{invalidFile}
-	command = "up"
-
-	err = run()
+	cmd = exec.Command(suite.qecCmd,
+		"-f", invalidFile,
+	)
+	output, err = cmd.CombinedOutput()
 	assert.Error(suite.T(), err)
-}
-
-// resetFlags resets all global flags to their default values
-func resetFlags() {
-	composeFiles = nil
-	verbose = false
-	dryRun = false
-	detach = false
-	command = "up"
-	showHelp = false
-	args = nil
 }
 
 // Run the test suite
