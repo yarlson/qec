@@ -252,7 +252,7 @@ func (suite *IntegrationTestSuite) TestEndToEndErrorHandling() {
 	cmd = exec.Command(suite.qecCmd,
 		"-f", invalidFile,
 	)
-	output, err = cmd.CombinedOutput()
+	_, err = cmd.CombinedOutput()
 	assert.Error(suite.T(), err)
 }
 

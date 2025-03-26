@@ -17,6 +17,8 @@ type PortConflict struct {
 
 // DetectPortConflicts scans through service configurations and identifies host port collisions
 func DetectPortConflicts(services types.Services, logger *logrus.Entry) map[uint32][]string {
+	logger = logger.WithField("function", "DetectPortConflicts")
+
 	// Map to store port -> service name mappings
 	portMap := make(map[uint32][]string)
 
@@ -63,6 +65,9 @@ func DetectPortConflicts(services types.Services, logger *logrus.Entry) map[uint
 
 // ResolvePortConflicts attempts to resolve port conflicts by applying an offset
 func ResolvePortConflicts(services types.Services, offset uint32, logger *logrus.Entry) error {
+	// Initialize logger for this function
+	logger = logger.WithField("function", "ResolvePortConflicts")
+
 	// First detect all conflicts
 	conflicts := DetectPortConflicts(services, logger)
 

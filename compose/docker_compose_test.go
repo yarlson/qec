@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -16,19 +15,17 @@ import (
 // DockerComposeTestSuite defines the test suite for Docker Compose integration
 type DockerComposeTestSuite struct {
 	suite.Suite
-	logger *logrus.Entry
 	tmpDir string
 }
 
 // SetupTest runs before each test
 func (suite *DockerComposeTestSuite) SetupTest() {
-	suite.logger = logrus.New().WithField("test", true)
 	suite.tmpDir = suite.T().TempDir()
 }
 
 // TestNewDockerComposeCmd tests the creation of a new Docker Compose command
 func (suite *DockerComposeTestSuite) TestNewDockerComposeCmd() {
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 	assert.NotEmpty(suite.T(), cmd.Executable)
 	assert.NotNil(suite.T(), cmd.Args)
@@ -37,7 +34,7 @@ func (suite *DockerComposeTestSuite) TestNewDockerComposeCmd() {
 
 // TestDockerComposeCmdWithArgs tests adding arguments to the command
 func (suite *DockerComposeTestSuite) TestDockerComposeCmdWithArgs() {
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 
 	// Add arguments
@@ -51,7 +48,7 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdWithArgs() {
 
 // TestDockerComposeCmdWithWorkingDir tests setting the working directory
 func (suite *DockerComposeTestSuite) TestDockerComposeCmdWithWorkingDir() {
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 
 	// Set working directory
@@ -62,7 +59,7 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdWithWorkingDir() {
 
 // TestDockerComposeCmdBuild tests building the final command
 func (suite *DockerComposeTestSuite) TestDockerComposeCmdBuild() {
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 
 	// Configure the command
@@ -70,7 +67,7 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdBuild() {
 	cmd.WithWorkingDir("/test/dir")
 
 	// Build the command
-	execCmd := cmd.Build(suite.logger)
+	execCmd := cmd.Build()
 
 	// Verify the command
 	assert.Equal(suite.T(), cmd.Executable, execCmd.Path)
@@ -86,12 +83,12 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdBuild() {
 
 // TestDockerComposeCmdRun tests command execution
 func (suite *DockerComposeTestSuite) TestDockerComposeCmdRun() {
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 
 	// Test successful command (version)
 	cmd.Args = []string{"version"}
-	output, err := cmd.Run(suite.logger)
+	output, err := cmd.Run()
 	require.NoError(suite.T(), err)
 	assert.Equal(suite.T(), 0, output.ExitCode)
 	assert.NotEmpty(suite.T(), output.Output)
@@ -99,7 +96,7 @@ func (suite *DockerComposeTestSuite) TestDockerComposeCmdRun() {
 
 	// Test failed command
 	cmd.Args = []string{"non-existent-command"}
-	output, err = cmd.Run(suite.logger)
+	output, err = cmd.Run()
 	assert.Error(suite.T(), err)
 	assert.NotEqual(suite.T(), 0, output.ExitCode)
 	assert.NotEmpty(suite.T(), output.Output)
@@ -119,26 +116,26 @@ services:
 	require.NoError(suite.T(), err)
 
 	// Create and configure the command
-	cmd, err := NewDockerComposeCmd(suite.logger)
+	cmd, err := NewDockerComposeCmd()
 	require.NoError(suite.T(), err)
 
 	cmd.WithWorkingDir(suite.tmpDir)
 	cmd.WithArgs("-f", "docker-compose.yml", "up", "-d")
 
 	// Run in background
-	err = cmd.RunBackground(suite.logger)
+	err = cmd.RunBackground()
 	assert.NoError(suite.T(), err)
 
 	// Test with invalid working directory
 	cmd.WithWorkingDir("/nonexistent")
-	err = cmd.RunBackground(suite.logger)
+	err = cmd.RunBackground()
 	assert.Error(suite.T(), err)
 }
 
 // TestCheckDockerCompose tests the Docker Compose detection functionality
 func (suite *DockerComposeTestSuite) TestCheckDockerCompose() {
 	// Test with real Docker Compose installation
-	err := CheckDockerCompose(suite.logger)
+	err := CheckDockerCompose()
 	require.NoError(suite.T(), err, "Docker Compose should be available in the test environment")
 
 	// Test with missing Docker Compose by temporarily modifying PATH
@@ -154,7 +151,7 @@ func (suite *DockerComposeTestSuite) TestCheckDockerCompose() {
 	os.Setenv("PATH", tmpPath)
 
 	// Now check should fail
-	err = CheckDockerCompose(suite.logger)
+	err = CheckDockerCompose()
 	assert.Error(suite.T(), err)
 	assert.Contains(suite.T(), err.Error(), "neither docker-compose nor docker executable found in PATH")
 }
@@ -170,11 +167,11 @@ func (suite *DockerComposeTestSuite) TestCheckDockerComposeVersion() {
 	}
 
 	// Test version check with real executable
-	err = checkDockerComposeVersion(path, suite.logger)
+	err = checkDockerComposeVersion(path)
 	require.NoError(suite.T(), err)
 
 	// Test with non-existent executable
-	err = checkDockerComposeVersion("/nonexistent/docker-compose", suite.logger)
+	err = checkDockerComposeVersion("/nonexistent/docker-compose")
 	assert.Error(suite.T(), err)
 }
 
@@ -185,11 +182,11 @@ func (suite *DockerComposeTestSuite) TestCheckDockerComposePlugin() {
 	require.NoError(suite.T(), err)
 
 	// Test plugin check with real docker
-	err = checkDockerComposePlugin(path, suite.logger)
+	err = checkDockerComposePlugin(path)
 	require.NoError(suite.T(), err)
 
 	// Test with non-existent executable
-	err = checkDockerComposePlugin("/nonexistent/docker", suite.logger)
+	err = checkDockerComposePlugin("/nonexistent/docker")
 	assert.Error(suite.T(), err)
 }
 

@@ -82,21 +82,21 @@ func run() error {
 		return fmt.Errorf("no compose files specified. Use -f flag to specify compose files")
 	}
 
-	// Configure logging
-	logger := logrus.New()
+	// Configure base logger
+	baseLogger := logrus.New()
 	if verbose {
-		logger.SetLevel(logrus.DebugLevel)
-		logger.Info("Verbose logging enabled")
+		baseLogger.SetLevel(logrus.DebugLevel)
+		baseLogger.Info("Verbose logging enabled")
 	}
 
 	if dryRun {
-		logger.Info("Running in dry-run mode - no changes will be made")
+		baseLogger.Info("Running in dry-run mode - no changes will be made")
 	}
 
 	// Load and process each compose file
 	var files []*compose.ComposeFile
 	for _, file := range composeFiles {
-		cf, err := compose.NewComposeFile(file, logger.WithField("component", "loader"))
+		cf, err := compose.NewComposeFile(file)
 		if err != nil {
 			return fmt.Errorf("error loading compose file %s: %v", file, err)
 		}
@@ -111,7 +111,7 @@ func run() error {
 
 	// Create an executor with the merged configuration
 	workingDir := filepath.Dir(composeFiles[0])
-	executor := compose.NewExecutor(merged, workingDir, dryRun, logger.WithField("component", "executor"))
+	executor := compose.NewExecutor(merged, workingDir, dryRun)
 
 	// Add command-specific arguments
 	if command == "up" {
@@ -128,7 +128,7 @@ func run() error {
 		return fmt.Errorf("error executing %s command: %v", command, err)
 	}
 
-	logger.Info("Command executed successfully")
+	baseLogger.Info("Command executed successfully")
 	return nil
 }
 

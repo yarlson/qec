@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -14,13 +13,11 @@ import (
 // MergeTestSuite defines the test suite for merge functionality
 type MergeTestSuite struct {
 	suite.Suite
-	logger *logrus.Entry
 	tmpDir string
 }
 
 // SetupTest runs before each test
 func (suite *MergeTestSuite) SetupTest() {
-	suite.logger = logrus.New().WithField("test", true)
 	suite.tmpDir = suite.T().TempDir()
 }
 
@@ -46,7 +43,7 @@ services:
 	require.NoError(suite.T(), err)
 
 	// Test loading the compose file
-	cf, err := NewComposeFile(testFile, suite.logger)
+	cf, err := NewComposeFile(testFile)
 	require.NoError(suite.T(), err)
 	assert.Equal(suite.T(), testFile, cf.Path)
 	assert.Equal(suite.T(), suite.tmpDir, cf.BaseDir)
@@ -112,9 +109,9 @@ services:
 	require.NoError(suite.T(), err)
 
 	// Load and merge the compose files
-	cf1, err := NewComposeFile(file1, suite.logger)
+	cf1, err := NewComposeFile(file1)
 	require.NoError(suite.T(), err)
-	cf2, err := NewComposeFile(file2, suite.logger)
+	cf2, err := NewComposeFile(file2)
 	require.NoError(suite.T(), err)
 
 	merged, err := MergeComposeFiles([]*ComposeFile{cf1, cf2})
@@ -166,7 +163,7 @@ services:
 	require.NoError(suite.T(), err)
 
 	// Load the compose file
-	cf, err := NewComposeFile(testFile, suite.logger)
+	cf, err := NewComposeFile(testFile)
 	require.NoError(suite.T(), err)
 
 	// Adjust build contexts
@@ -220,7 +217,7 @@ secrets:
 	require.NoError(suite.T(), err)
 
 	// Load the compose file
-	cf, err := NewComposeFile(testFile, suite.logger)
+	cf, err := NewComposeFile(testFile)
 	require.NoError(suite.T(), err)
 
 	// Test prefixing with a sample prefix
@@ -295,9 +292,9 @@ volumes:
 	require.NoError(suite.T(), err)
 
 	// Load and merge the compose files
-	cf1, err := NewComposeFile(file1, suite.logger)
+	cf1, err := NewComposeFile(file1)
 	require.NoError(suite.T(), err)
-	cf2, err := NewComposeFile(file2, suite.logger)
+	cf2, err := NewComposeFile(file2)
 	require.NoError(suite.T(), err)
 
 	merged, err := MergeComposeFiles([]*ComposeFile{cf1, cf2})
@@ -364,9 +361,9 @@ services:
 	require.NoError(suite.T(), err)
 
 	// Load and merge the compose files
-	cf1, err := NewComposeFile(file1, suite.logger)
+	cf1, err := NewComposeFile(file1)
 	require.NoError(suite.T(), err)
-	cf2, err := NewComposeFile(file2, suite.logger)
+	cf2, err := NewComposeFile(file2)
 	require.NoError(suite.T(), err)
 
 	merged, err := MergeComposeFiles([]*ComposeFile{cf1, cf2})

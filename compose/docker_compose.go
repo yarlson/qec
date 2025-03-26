@@ -25,7 +25,9 @@ type DockerComposeCmd struct {
 }
 
 // NewDockerComposeCmd creates a new Docker Compose command configuration
-func NewDockerComposeCmd(logger *logrus.Entry) (*DockerComposeCmd, error) {
+func NewDockerComposeCmd() (*DockerComposeCmd, error) {
+	logger := logrus.New().WithField("function", "NewDockerComposeCmd")
+
 	// Find the docker-compose executable
 	path, err := exec.LookPath("docker-compose")
 	if err != nil {
@@ -64,7 +66,9 @@ func (cmd *DockerComposeCmd) WithWorkingDir(dir string) *DockerComposeCmd {
 }
 
 // Build constructs and returns the final exec.Cmd
-func (cmd *DockerComposeCmd) Build(logger *logrus.Entry) *exec.Cmd {
+func (cmd *DockerComposeCmd) Build() *exec.Cmd {
+	logger := logrus.New().WithField("function", "Build")
+
 	// Prepare the command arguments
 	var finalArgs []string
 	if cmd.IsPlugin {
@@ -89,9 +93,11 @@ func (cmd *DockerComposeCmd) Build(logger *logrus.Entry) *exec.Cmd {
 }
 
 // Run executes the Docker Compose command and returns its output
-func (cmd *DockerComposeCmd) Run(logger *logrus.Entry) (*CommandOutput, error) {
+func (cmd *DockerComposeCmd) Run() (*CommandOutput, error) {
+	logger := logrus.New().WithField("function", "Run")
+
 	// Build the command
-	execCmd := cmd.Build(logger)
+	execCmd := cmd.Build()
 
 	// Create buffers for stdout and stderr
 	var stdout, stderr bytes.Buffer
@@ -131,9 +137,11 @@ func (cmd *DockerComposeCmd) Run(logger *logrus.Entry) (*CommandOutput, error) {
 }
 
 // RunBackground executes the Docker Compose command in the background
-func (cmd *DockerComposeCmd) RunBackground(logger *logrus.Entry) error {
+func (cmd *DockerComposeCmd) RunBackground() error {
+	logger := logrus.New().WithField("function", "RunBackground")
+
 	// Build the command
-	execCmd := cmd.Build(logger)
+	execCmd := cmd.Build()
 
 	// Start the command without waiting for it to complete
 	if err := execCmd.Start(); err != nil {
@@ -146,7 +154,9 @@ func (cmd *DockerComposeCmd) RunBackground(logger *logrus.Entry) error {
 }
 
 // CheckDockerCompose verifies that Docker Compose is installed and accessible
-func CheckDockerCompose(logger *logrus.Entry) error {
+func CheckDockerCompose() error {
+	logger := logrus.New().WithField("function", "CheckDockerCompose")
+
 	// First try to find the docker-compose executable
 	path, err := exec.LookPath("docker-compose")
 	if err != nil {
@@ -160,15 +170,17 @@ func CheckDockerCompose(logger *logrus.Entry) error {
 	// Check if we found docker-compose or docker
 	if strings.HasSuffix(path, "docker-compose") {
 		logger.Debugf("Found docker-compose at %s", path)
-		return checkDockerComposeVersion(path, logger)
+		return checkDockerComposeVersion(path)
 	} else {
 		logger.Debugf("Found docker at %s, checking compose plugin", path)
-		return checkDockerComposePlugin(path, logger)
+		return checkDockerComposePlugin(path)
 	}
 }
 
 // checkDockerComposeVersion checks the version of the docker-compose executable
-func checkDockerComposeVersion(path string, logger *logrus.Entry) error {
+func checkDockerComposeVersion(path string) error {
+	logger := logrus.New().WithField("function", "checkDockerComposeVersion")
+
 	cmd := exec.Command(path, "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -183,7 +195,9 @@ func checkDockerComposeVersion(path string, logger *logrus.Entry) error {
 }
 
 // checkDockerComposePlugin checks if the docker compose plugin is available
-func checkDockerComposePlugin(path string, logger *logrus.Entry) error {
+func checkDockerComposePlugin(path string) error {
+	logger := logrus.New().WithField("function", "checkDockerComposePlugin")
+
 	cmd := exec.Command(path, "compose", "version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {

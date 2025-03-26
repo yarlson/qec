@@ -16,11 +16,10 @@ type ComposeFile struct {
 	Path    string
 	BaseDir string
 	Project *types.Project
-	logger  *logrus.Entry
 }
 
 // NewComposeFile creates a new ComposeFile instance
-func NewComposeFile(path string, logger *logrus.Entry) (*ComposeFile, error) {
+func NewComposeFile(path string) (*ComposeFile, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path for %s: %w", path, err)
@@ -49,12 +48,13 @@ func NewComposeFile(path string, logger *logrus.Entry) (*ComposeFile, error) {
 		Path:    absPath,
 		BaseDir: baseDir,
 		Project: project,
-		logger:  logger.WithField("file", absPath),
 	}, nil
 }
 
 // adjustBuildContexts converts relative build contexts to absolute paths
 func (cf *ComposeFile) adjustBuildContexts() error {
+	logger := logrus.New().WithField("function", "adjustBuildContexts")
+
 	for name, service := range cf.Project.Services {
 		if service.Build == nil {
 			continue
@@ -63,7 +63,7 @@ func (cf *ComposeFile) adjustBuildContexts() error {
 		// If context is relative, make it absolute using the file's base directory
 		if !filepath.IsAbs(service.Build.Context) {
 			absContext := filepath.Join(cf.BaseDir, service.Build.Context)
-			cf.logger.Debugf("Converting build context for service %s from %s to %s",
+			logger.Debugf("Converting build context for service %s from %s to %s",
 				name, service.Build.Context, absContext)
 			service.Build.Context = absContext
 		}
@@ -76,6 +76,8 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no compose files provided")
 	}
+
+	logger := logrus.New().WithField("function", "MergeComposeFiles")
 
 	// Use the first file's project as the base
 	baseProject := files[0].Project
@@ -153,7 +155,6 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 	}
 
 	// After merging all files, resolve any port conflicts
-	logger := files[0].logger.WithField("component", "port_resolver")
 	if err := ResolvePortConflicts(baseProject.Services, 100, logger); err != nil {
 		return nil, fmt.Errorf("failed to resolve port conflicts: %w", err)
 	}
@@ -163,6 +164,8 @@ func MergeComposeFiles(files []*ComposeFile) (*types.Project, error) {
 
 // prefixResourceNames prefixes all resource names (services, volumes, configs, secrets) with the given prefix
 func (cf *ComposeFile) prefixResourceNames(prefix string) error {
+	logger := logrus.New().WithField("function", "prefixResourceNames")
+
 	// Create a map to store old name to new name mappings for dependency updates
 	nameMap := make(map[string]string)
 
@@ -172,7 +175,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 		newName := prefix + "_" + name
 		nameMap[name] = newName
 		newServices[newName] = service
-		cf.logger.Debugf("Prefixed service name from %s to %s", name, newName)
+		logger.Debugf("Prefixed service name from %s to %s", name, newName)
 	}
 	cf.Project.Services = newServices
 
@@ -183,7 +186,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 			newName := prefix + "_" + name
 			nameMap[name] = newName
 			newVolumes[newName] = volume
-			cf.logger.Debugf("Prefixed volume name from %s to %s", name, newName)
+			logger.Debugf("Prefixed volume name from %s to %s", name, newName)
 		}
 		cf.Project.Volumes = newVolumes
 	}
@@ -197,7 +200,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 					// If the volume source is a named volume, update its reference
 					if newName, ok := nameMap[volume.Source]; ok {
 						volume.Source = newName
-						cf.logger.Debugf("Updated volume reference in service %s from %s to %s", name, volume.Source, newName)
+						logger.Debugf("Updated volume reference in service %s from %s to %s", name, volume.Source, newName)
 					}
 				}
 				newVolumes[i] = volume
@@ -214,7 +217,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 			newName := prefix + "_" + name
 			nameMap[name] = newName
 			newConfigs[newName] = config
-			cf.logger.Debugf("Prefixed config name from %s to %s", name, newName)
+			logger.Debugf("Prefixed config name from %s to %s", name, newName)
 		}
 		cf.Project.Configs = newConfigs
 	}
@@ -226,7 +229,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 			newName := prefix + "_" + name
 			nameMap[name] = newName
 			newSecrets[newName] = secret
-			cf.logger.Debugf("Prefixed secret name from %s to %s", name, newName)
+			logger.Debugf("Prefixed secret name from %s to %s", name, newName)
 		}
 		cf.Project.Secrets = newSecrets
 	}
@@ -239,7 +242,7 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 			for depName, config := range service.DependsOn {
 				newName := prefix + "_" + depName
 				newDependsOn[newName] = config
-				cf.logger.Debugf("Updated dependency from %s to %s", depName, newName)
+				logger.Debugf("Updated dependency from %s to %s", depName, newName)
 			}
 			service.DependsOn = newDependsOn
 			cf.Project.Services[name] = service
@@ -253,11 +256,11 @@ func (cf *ComposeFile) prefixResourceNames(prefix string) error {
 				if len(parts) == 2 {
 					newName := prefix + "_" + parts[0]
 					newLinks[i] = newName + ":" + parts[1]
-					cf.logger.Debugf("Updated link from %s to %s", link, newLinks[i])
+					logger.Debugf("Updated link from %s to %s", link, newLinks[i])
 				} else {
 					newName := prefix + "_" + link
 					newLinks[i] = newName
-					cf.logger.Debugf("Updated link from %s to %s", link, newName)
+					logger.Debugf("Updated link from %s to %s", link, newName)
 				}
 			}
 			service.Links = newLinks

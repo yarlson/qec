@@ -11,16 +11,14 @@ import (
 
 // Executor handles Docker Compose command execution with merged configurations
 type Executor struct {
-	logger     *logrus.Entry
 	project    *types.Project
 	workingDir string
 	dryRun     bool
 }
 
 // NewExecutor creates a new Docker Compose executor
-func NewExecutor(project *types.Project, workingDir string, dryRun bool, logger *logrus.Entry) *Executor {
+func NewExecutor(project *types.Project, workingDir string, dryRun bool) *Executor {
 	return &Executor{
-		logger:     logger.WithField("component", "executor"),
 		project:    project,
 		workingDir: workingDir,
 		dryRun:     dryRun,
@@ -29,6 +27,8 @@ func NewExecutor(project *types.Project, workingDir string, dryRun bool, logger 
 
 // writeConfig writes the merged configuration to a temporary file
 func (e *Executor) writeConfig() (string, error) {
+	logger := logrus.New().WithField("function", "writeConfig")
+
 	// If this is a dry run, just return a placeholder path
 	if e.dryRun {
 		return filepath.Join(e.workingDir, "docker-compose.merged.yml"), nil
@@ -49,14 +49,16 @@ func (e *Executor) writeConfig() (string, error) {
 		return "", fmt.Errorf("failed to write configuration file: %w", err)
 	}
 
-	e.logger.Debugf("Wrote merged configuration to %s", configFile)
+	logger.Debugf("Wrote merged configuration to %s", configFile)
 	return configFile, nil
 }
 
 // ExecuteCommand executes a Docker Compose command with the merged configuration
 func (e *Executor) ExecuteCommand(cmdName string, args ...string) error {
+	logger := logrus.New().WithField("function", "ExecuteCommand")
+
 	// First check if Docker Compose is available
-	if err := CheckDockerCompose(e.logger); err != nil {
+	if err := CheckDockerCompose(); err != nil {
 		return fmt.Errorf("docker compose check failed: %w", err)
 	}
 
@@ -67,7 +69,7 @@ func (e *Executor) ExecuteCommand(cmdName string, args ...string) error {
 	}
 
 	// Create the Docker Compose command
-	cmd, err := NewDockerComposeCmd(e.logger)
+	cmd, err := NewDockerComposeCmd()
 	if err != nil {
 		return fmt.Errorf("failed to create docker compose command: %w", err)
 	}
@@ -81,13 +83,13 @@ func (e *Executor) ExecuteCommand(cmdName string, args ...string) error {
 
 	// If this is a dry run, just log what would be done
 	if e.dryRun {
-		e.logger.Info("Dry run: would execute docker compose " + cmdName)
-		e.logger.Debugf("Command: %s %v", cmd.Executable, cmd.Args)
+		logger.Info("Dry run: would execute docker compose " + cmdName)
+		logger.Debugf("Command: %s %v", cmd.Executable, cmd.Args)
 		return nil
 	}
 
 	// Run the command
-	output, err := cmd.Run(e.logger)
+	output, err := cmd.Run()
 	if err != nil {
 		return fmt.Errorf("docker compose %s failed: %w\nOutput: %s", cmdName, err, output.Output)
 	}
